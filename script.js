@@ -57,7 +57,7 @@ function start_game() {
     castling = {
         w: { kr: true, qr: true },
         b: { kr: true, qr: true }
-    }
+    };
     board = [
         ["br", "bn", "bb", "bq", "bk", "bb", "bn", "br"],
         ["bp", "bp", "bp", "bp", "bp", "bp", "bp", "bp"],
