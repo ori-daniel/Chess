@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="homepage">
+        <h1>Welcome To Chess!</h1>
+
+        <div class="options">
+            <div class="players">
+                <button class="option" id="1-players" onclick="reset_options(custom_players=1)">
+                    <span class="fas fa-user"></span>One Player
+                </button>
+
+                <button class="option" id="2-players" onclick="reset_options(custom_players=2)">
+                    <span class="fas fa-user-friends"></span>Two Players
+                </button>
+            </div>
+
+            <div class="AI-difficulty-container">
+                AI Difficulty:
+                <input type="range" min="1" max="5" id="AI-difficulty" onchange="update_AI_difficulty()">
+                <span id="AI-difficulty-span"></span>
+            </div>
+
+            <div class="gamemode-container">
+                <button class="option" id="local-play" onclick="select_gamemode('local')">
+                    <span class="fas fa-house"></span>Local Play
+                </button>
+
+                <button class="option" id="online-play" onclick="select_gamemode('online')">
+                    <span class="fas fa-globe"></span>Online Play
+                </button>
+            </div>
+        </div>
+
+        <button class="play-button" onclick="start_game()">
+            <span class="fas fa-chess"></span>Play
+        </button>
+    </div>
+
+    <div class="game">
+        <div class="game-header">
+            <button id="homepage-button" onclick="reset_options()">
+                <span class="fas fa-home"></span>Homepage
+            </button>
+
+            <button id="undo-button" onclick="undo(players == 2 ? 1 : 2)">
+                <span class="fas fa-arrow-rotate-left"></span>Undo
+            </button>
+        </div>
+
+        <div class="player-info" id="b-player">
+            <img class="profile-picture" src="assets/profile-pictures/black.png">
+
+            <div class="player-data">
+                <div class="username">Black</div>
+
+                <div class="captured-data">
+                    <span class="captured-pieces"></span>
+                    <span class="captured-score"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="board"></div>
+
+        <div class="player-info" id="w-player">
+            <img class="profile-picture" src="assets/profile-pictures/white.png">
+
+            <div class="player-data">
+                <div class="username">White</div>
+
+                <div class="captured-data">
+                    <span class="captured-pieces"></span>
+                    <span class="captured-score"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="popup">
+            <span class="fas fa-times hide-popup-button" onclick="hide_popup()"></span>
+
+            <div class="popup-text">
+                <span class="popup-title"></span>
+                <span class="popup-description"></span>
+            </div>
+
+            <button onclick="start_game()">
+                <span class="fas fa-arrows-rotate"></span>Play Again
+            </button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
