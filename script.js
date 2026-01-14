@@ -135,11 +135,7 @@ function drop(square) {
         apply_move(move);
         render_board(move);
 
-        if (players == 1) setTimeout(() => {
-            console.time("AI");
-            play_AI_move()
-            console.timeEnd("AI");
-        }, 100);
+        if (players == 1) setTimeout(() => play_AI_move(), 100);
     } else {
         remove_overlays();
 
@@ -395,14 +391,33 @@ function get_special_draw() {
 
     if (occurrences == 3) return "Threefold Repetition";
 
-    let pieces = "";
+    let knight = "";
+    let bishops = "";
+    let bishop_square_color = "";
+    let index = 0;
 
     for (const square of current_board_state.slice(6)) {
-        if ("prq".includes(square.toLowerCase()) || pieces.includes(square)) return "";
-        if (square != ".") pieces += square;
+        const piece = square.toLowerCase();
+
+        if (piece == "p" || piece == "r" || piece == "q") {
+            return "";
+        } else if (piece == "n") {
+            if (knight) return "";
+
+            knight = square;
+        } else if (piece == "b") {
+            const square_color = (Math.floor(index / 8) + (index % 8)) % 2 == 0 ? "w" : "b";
+
+            if (bishops.includes(square) || (bishop_square_color && (square_color != bishop_square_color))) return "";
+
+            bishops += square;
+            bishop_square_color = square_color;
+        }
+
+        index++;
     }
 
-    return "Insufficient Material";
+    return knight && bishops ? "" : "Insufficient Material";
 }
 
 function is_possible_moves() {
