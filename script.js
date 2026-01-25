@@ -1,54 +1,93 @@
-let players, AI_difficulty, gamemode, from_square, undo_stack, fifty_move_counter, en_passant, castling, board, turn, sfx, board_states;
+let players, AI_difficulty, gamemode, time, player_color, timer, from_square, undo_stack, fifty_move_counter, en_passant, castling, board, turn, sfx, board_states;
 
 reset_options();
 
-function reset_options(custom_players=null) {
+function reset_options() {
     document.querySelector(".homepage").style.display = "";
     document.querySelector(".game").style.display = "";
 
-    players = custom_players ?? 2;
-    AI_difficulty = 4;
-    gamemode = "local";
+    update_players("people");
+    update_AI_difficulty(4);
+    update_gamemode("local");
+    update_time("rapid");
+    update_player_color("white");
 
-    for (const selected_option of document.querySelectorAll(".selected-option")) {
-        selected_option.classList.remove("selected-option");
-    }
+    timer = null;
+}
 
-    document.getElementById(`${players}-players`).classList.add("selected-option");
+function update_players(updated_players) {
+    players = updated_players;
 
-    if (players == 1) {
-        document.querySelector(".AI-difficulty-container").style.display = "";
-        document.querySelector(".gamemode-container").style.display = "none";
+    document.querySelector("#players .selected-option")?.classList.remove("selected-option");
+    document.getElementById(`play-${players}`).classList.add("selected-option");
+
+    if (players == "AI") {
+        document.getElementById("AI-difficulty").style.display = "";
+        document.getElementById("gamemode").style.display = "none";
+        document.getElementById("time").style.display = "none";
+        document.getElementById("player-color").style.display = "";
     } else {
-        document.querySelector(".AI-difficulty-container").style.display = "none";
-        document.querySelector(".gamemode-container").style.display = "";
+        document.getElementById("AI-difficulty").style.display = "none";
+        document.getElementById("gamemode").style.display = "";
+        document.getElementById("time").style.display = "";
+        document.getElementById("player-color").style.display = gamemode == "local" ? "none" : "";
     }
-
-    document.getElementById("AI-difficulty").value = AI_difficulty;
-    document.getElementById("AI-difficulty-span").innerHTML = AI_difficulty;
-    document.getElementById(`${gamemode}-play`).classList.add("selected-option");
 }
 
-function update_AI_difficulty() {
-    AI_difficulty = parseInt(document.getElementById("AI-difficulty").value);
-    document.getElementById("AI-difficulty-span").innerHTML = AI_difficulty;
+function update_AI_difficulty(updated_AI_difficulty) {
+    if (0 < updated_AI_difficulty && updated_AI_difficulty < 6) {
+        AI_difficulty = updated_AI_difficulty;
+
+        document.querySelector("#AI-difficulty img").src = `/assets/homepage-options/AI-difficulty/${AI_difficulty}.png`;
+    }
 }
 
-function select_gamemode(selected_gamemode) {
-    gamemode = selected_gamemode;
-    document.querySelector(".gamemode-container .selected-option").classList.remove("selected-option");
+function update_gamemode(updated_gamemode) {
+    gamemode = updated_gamemode;
+
+    document.querySelector("#gamemode .selected-option")?.classList.remove("selected-option");
     document.getElementById(`${gamemode}-play`).classList.add("selected-option");
+    document.getElementById("player-color").style.display = gamemode == "local" ? "none" : "";
+}
+
+function update_time(updated_time) {
+    time = updated_time;
+
+    document.querySelector("#time .selected-option")?.classList.remove("selected-option");
+    document.getElementById(`${time}-time`).classList.add("selected-option");
+}
+
+function update_player_color(updated_player_color) {
+    player_color = updated_player_color;
+
+    document.querySelector("#player-color .selected-option")?.classList.remove("selected-option");
+    document.getElementById(`${player_color}-color`).classList.add("selected-option");
 }
 
 function start_game() {
+    const time_map = { bullet: 1, blitz: 5, rapid: 10 };
+    timer = { w: time_map[time] * 60, b: time_map[time] * 60 };
+
     document.querySelector(".homepage").style.display = "none";
     document.querySelector(".game").style.display = "flex";
     document.getElementById("undo-button").disabled = false;
     document.querySelector(`#b-player .captured-pieces`).innerHTML = "";
     document.querySelector(`#b-player .captured-score`).innerHTML = "";
+    document.querySelector(`#b-player .timer`).style.backgroundColor = "";
+    document.querySelector(`#b-player .timer`).style.opacity = 0.5;
+    document.querySelector(`#b-player .timer img`).src = "assets/timer/white-clock.png";
+    document.querySelector(`#b-player .timer img`).style.transform = "";
+    document.querySelector(`#b-player .timer span`).innerHTML = format_time(timer.b);
+    document.querySelector(`#b-player .timer span`).style.color = "";
     document.querySelector(".board").style.pointerEvents = "";
     document.querySelector(`#w-player .captured-pieces`).innerHTML = "";
     document.querySelector(`#w-player .captured-score`).innerHTML = "";
+    document.querySelector(`#w-player .timer`).style.backgroundColor = "";
+    document.querySelector(`#w-player .timer`).style.opacity = 1;
+    document.querySelector(`#w-player .timer img`).src = "assets/timer/black-clock.png";
+    document.querySelector(`#w-player .timer img`).style.transform = "";
+    document.querySelector(`#w-player .timer span`).innerHTML = format_time(timer.w);
+    document.querySelector(`#w-player .timer span`).style.color = "";
     document.querySelector(".popup").style.display = "";
 
     undo_stack = [];
@@ -71,9 +110,20 @@ function start_game() {
     turn = "w";
     board_states = [get_board_state()];
 
+    if (players == "people" && gamemode == "local") {
+        player_color = "white";
+    } else if (player_color == "random") {
+        player_color = Math.random() < 0.5 ? "white" : "black";
+    }
+
+    document.querySelector(".game").style.flexDirection = player_color == "white" ? "column" : "column-reverse";
+    const start = player_color == "white" ? 0 : 7;
+    const end = player_color == "white" ? 8 : -1;
+    const step = player_color == "white" ? 1 : -1;
+
     let board_html = "";
 
-    for (let row = 0 ; row < 8 ; row++) {
+    for (let row = start ; row != end ; row += step) {
         for (let column = 0 ; column < 8 ; column++) {
             board_html += `<span class="${(row * 7 + column) % 2 == 0 ? "white" : "green"}-square" id="${row}${column}" onclick="click_square(this)" ondragstart="drag_start(this)" ondragover="drag_over(this, event)" ondragleave="drag_leave(this, event)" ondrop="drop(this)">${board[row][column] && `<img src="assets/pieces/${board[row][column]}.png" />`}</span>`;
         }
@@ -82,6 +132,47 @@ function start_game() {
     document.querySelector(".board").innerHTML = board_html;
 
     (new Audio("assets/sfx/game-start.webm")).play();
+
+    if (players == "AI") {
+        document.querySelector("#b-player .timer").style.display = "none";
+        document.querySelector("#w-player .timer").style.display = "none";
+
+        if (player_color == "black") setTimeout(() => play_AI_move(), 100);
+    } else {
+        document.querySelector("#b-player .timer").style.display = "";
+        document.querySelector("#w-player .timer").style.display = "";
+
+        setTimeout(() => update_timer(), 1000);
+    }
+}
+
+function format_time(seconds) {
+    return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+function update_timer() {
+    if (timer) {
+        if (timer[turn]) {
+            timer[turn]--;
+
+            if (timer[turn] < 11) {
+                document.querySelector(`#${turn}-player .timer`).style.backgroundColor = "#af1e22";
+                document.querySelector(`#${turn}-player .timer img`).src = "assets/timer/white-clock.png";
+                document.querySelector(`#${turn}-player .timer span`).style.color = "white";
+
+                if (timer[turn] == 10) (new Audio("assets/sfx/tenseconds.webm")).play();
+            }
+
+            document.querySelector(`#${turn}-player .timer img`).style.transform = `rotate(${(-timer[turn] % 4) * 90}deg)`;
+            document.querySelector(`#${turn}-player .timer span`).innerHTML = format_time(timer[turn]);
+
+            setTimeout(() => update_timer(), 1000);
+        } else {
+            show_popup(`${turn == "w" ? "Black" : "White"} Won!`, "Timeout");
+
+            (new Audio("assets/sfx/game-end.webm")).play();
+        }
+    }
 }
 
 function remove_overlays() {
@@ -135,7 +226,7 @@ function drop(square) {
         apply_move(move);
         render_board(move);
 
-        if (players == 1) setTimeout(() => play_AI_move(), 100);
+        if (players == "AI") setTimeout(() => play_AI_move(), 100);
     } else {
         remove_overlays();
 
@@ -144,7 +235,12 @@ function drop(square) {
 }
 
 function show_popup(title, description) {
+    timer = null;
+
     document.getElementById("undo-button").disabled = true;
+    document.querySelector(`#${turn}-player .timer`).style.backgroundColor = "";
+    document.querySelector(`#${turn}-player .timer img`).src = `assets/timer/${turn == "w" ? "black" : "white"}-clock.png`;
+    document.querySelector(`#${turn}-player .timer span`).style.color = "";
     document.querySelector(".board").style.pointerEvents = "none";
     document.querySelector(".popup").style.display = "flex";
     document.querySelector(".popup-title").innerHTML = title;
@@ -240,6 +336,25 @@ function render_board(move, custom_sfx=null) {
         }
     } else if (in_check()) {
         custom_sfx = "move-check";
+    }
+
+    document.querySelector(`#${turn}-player .timer`).style.opacity = 1;
+    if (timer[turn] < 11) {
+        document.querySelector(`#${turn}-player .timer`).style.backgroundColor = "#af1e22";
+        document.querySelector(`#${turn}-player .timer img`).src = "assets/timer/white-clock.png";
+        document.querySelector(`#${turn}-player .timer span`).style.color = "white";
+    }
+
+    if (turn == "w") {
+        document.querySelector(`#b-player .timer`).style.backgroundColor = "";
+        document.querySelector(`#b-player .timer`).style.opacity = 0.5;
+        document.querySelector(`#b-player .timer img`).src = "assets/timer/white-clock.png";
+        document.querySelector(`#b-player .timer span`).style.color = "";
+    } else {
+        document.querySelector(`#w-player .timer`).style.backgroundColor = "";
+        document.querySelector(`#w-player .timer`).style.opacity = 0.5;
+        document.querySelector(`#w-player .timer img`).src = "assets/timer/black-clock.png";
+        document.querySelector(`#w-player .timer span`).style.color = "";
     }
 
     (new Audio(`assets/sfx/${custom_sfx ?? sfx}.webm`)).play();

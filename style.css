@@ -7,79 +7,113 @@ body {
 }
 
 .homepage {
-    position: relative;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-}
-
-h1 {
-    position: absolute;
-    top: 100px;
-    margin: 0;
-    text-align: center;
-    font-size: 70px;
-}
-
-.options {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 20px;
-    height: 105px;
+    height: 100vh;
+    padding: 30px;
+    box-sizing: border-box;
 }
 
-.players {
+h1 {
+    margin: 0;
+    text-align: center;
+    font-size: 50px;
+}
+
+.options {
+    flex: 1;
     display: flex;
-    gap: 20px;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
+    width: 100%;
+    max-width: 500px;
 }
 
-.option {
-    font-size: 20px;
+.options div {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 30px;
+    width: 100%;
+}
+
+.options button {
+    font-size: 22px;
+    font-weight: bold;
     color: white;
-    background-color: #95a5a6;
+    background-color: #3b3a38;
     border: none;
     border-radius: 10px;
     cursor: pointer;
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 10px;
-    padding: 10px;
-    width: 170px;
+    gap: 20px;
+    padding: 20px;
+    width: calc((100% - 30px) / 2);
+    height: 100%;
     transition: background-color 0.2s ease;
 }
 
+@media (hover: hover) {
+    .options button:hover {
+        background-color: #464543;
+    }
+}
+
 .selected-option {
-    background-color: #2980b9 !important;
+    outline: 5px solid #81b64c;
+}
+
+.options img {
+    width: 40px;
+}
+
+#AI-difficulty span {
+    font-size: 32px;
+    background-color: #3b3a38;
+    border-radius: 10px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 50px;
+    height: 50px;
+    transition: background-color 0.2s ease;
 }
 
 @media (hover: hover) {
-    .option:hover {
-        background-color: #7f8c8d;
-    }
-
-    .selected-option:hover {
-        background-color: #21618c !important;
+    #AI-difficulty span:hover {
+        background-color: #464543;
     }
 }
 
-.AI-difficulty-container {
-    font-size: 25px;
-    font-style: italic;
-    font-weight: bold;
+#AI-difficulty img {
+    width: 75px;
+    user-select: none;
 }
 
-.gamemode-container {
-    display: flex;
-    gap: 20px;
+#time button {
+    width: calc((100% - 60px) / 3);
+}
+
+@media (max-width: 499px) {
+    #time button {
+        gap: 10px;
+    }
+}
+
+#player-color img {
+    width: 75px;
+    border-radius: 10px;
+    cursor: pointer;
 }
 
 .play-button {
-    position: absolute;
-    bottom: 100px;
-    font-size: 40px;
+    font-size: 30px;
     color: white;
     background-color: #4CAF50;
     border: none;
@@ -100,7 +134,6 @@ h1 {
 
 .game {
     display: none;
-    flex-direction: column;
     justify-content: center;
     align-items: center;
     gap: 20px;
@@ -151,6 +184,7 @@ h1 {
 
 .player-info {
     display: flex;
+    align-items: center;
     gap: 20px;
     width: min(100vh - 240px, 100vw);
     height: 50px;
@@ -159,14 +193,17 @@ h1 {
 }
 
 .profile-picture {
+    height: 100%;
     border-radius: 10%;
 }
 
 .player-data {
+    flex: 1;
     display: flex;
     flex-direction: column;
     justify-content: center;
     gap: 5px;
+    height: 100%;
 }
 
 .username {
@@ -190,6 +227,43 @@ h1 {
 
 .captured-score {
     color: #989795;
+}
+
+.timer {
+    display: flex;
+    gap: 30px;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+#b-player .timer {
+    background-color: black;
+}
+
+#w-player .timer {
+    background-color: white;
+}
+
+.timer img {
+    height: 25px;
+}
+
+@font-face {
+    font-family: Timer;
+    src: url(assets/timer/font.woff2);
+}
+
+.timer span {
+    font-family: Timer;
+    font-size: 25px;
+}
+
+#b-player .timer span {
+    color: white;
+}
+
+#w-player .timer span {
+   color: black;
 }
 
 .board {
