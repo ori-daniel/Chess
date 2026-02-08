@@ -1,4 +1,4 @@
-let players, AI_difficulty, gamemode, time, player_color, timer, from_square, undo_stack, fifty_move_counter, en_passant, castling, board, turn, sfx, board_states;
+let players, AI_difficulty, gamemode, time, player_color, timer, gameover, undo_stack, fifty_move_counter, en_passant, castling, board, turn, board_states, transposition_table, minimax_start_time, ws, sfx, from_square;
 
 reset_options();
 
@@ -7,12 +7,12 @@ function reset_options() {
     document.querySelector(".game").style.display = "";
 
     update_players("people");
-    update_AI_difficulty(4);
+    update_AI_difficulty(10);
     update_gamemode("local");
     update_time("rapid");
     update_player_color("white");
 
-    timer = null;
+    gameover = true;
 }
 
 function update_players(updated_players) {
@@ -35,7 +35,7 @@ function update_players(updated_players) {
 }
 
 function update_AI_difficulty(updated_AI_difficulty) {
-    if (0 < updated_AI_difficulty && updated_AI_difficulty < 6) {
+    if (0 < updated_AI_difficulty && updated_AI_difficulty < 21) {
         AI_difficulty = updated_AI_difficulty;
 
         document.querySelector("#AI-difficulty img").src = `/assets/homepage-options/AI-difficulty/${AI_difficulty}.png`;
@@ -90,6 +90,7 @@ function start_game() {
     document.querySelector(`#w-player .timer span`).style.color = "";
     document.querySelector(".popup").style.display = "";
 
+    gameover = false;
     undo_stack = [];
     fifty_move_counter = 0;
     en_passant = { row: null, column: null };
@@ -109,6 +110,7 @@ function start_game() {
     ];
     turn = "w";
     board_states = [get_board_state()];
+    transposition_table = {};
 
     if (players == "people" && gamemode == "local") {
         player_color = "white";
@@ -124,21 +126,35 @@ function start_game() {
     let board_html = "";
 
     for (let row = start ; row != end ; row += step) {
-        for (let column = 0 ; column < 8 ; column++) {
+        for (let column = start ; column != end ; column += step) {
             board_html += `<span class="${(row * 7 + column) % 2 == 0 ? "white" : "green"}-square" id="${row}${column}" onclick="click_square(this)" ondragstart="drag_start(this)" ondragover="drag_over(this, event)" ondragleave="drag_leave(this, event)" ondrop="drop(this)">${board[row][column] && `<img src="assets/pieces/${board[row][column]}.png" />`}</span>`;
         }
     }
 
     document.querySelector(".board").innerHTML = board_html;
 
-    (new Audio("assets/sfx/game-start.webm")).play();
-
     if (players == "AI") {
+        (new Audio("assets/sfx/game-start.webm")).play();
+
         document.querySelector("#b-player .timer").style.display = "none";
         document.querySelector("#w-player .timer").style.display = "none";
 
         if (player_color == "black") setTimeout(() => play_AI_move(), 100);
     } else {
+        if (gamemode == "online") {
+            if (!ws) ws = new WebSocket("ws://ws.oridaniel.com");
+
+            ws.onmessage = function (event) {
+                if (event.data) {
+                    load_game_string(event.data);
+                } else {
+                    (new Audio("assets/sfx/game-start.webm")).play();
+                }
+            }
+        } else {
+            (new Audio("assets/sfx/game-start.webm")).play();
+        }
+
         document.querySelector("#b-player .timer").style.display = "";
         document.querySelector("#w-player .timer").style.display = "";
 
@@ -146,12 +162,44 @@ function start_game() {
     }
 }
 
+function get_game_string(move) {
+    return JSON.stringify({
+        timer,
+        gameover,
+        fifty_move_counter,
+        en_passant,
+        castling,
+        board,
+        turn,
+        sfx,
+        move
+    });
+}
+
+function load_game_string(game_string) {
+    const game = JSON.parse(game_string);
+
+    timer = game.timer;
+    gameover = game.gameover;
+    fifty_move_counter = game.fifty_move_counter;
+    en_passant = game.en_passant;
+    castling = game.castling;
+    board = game.board;
+    turn = game.turn;
+    sfx = game.sfx;
+
+    document.querySelector(`#b-player .timer span`).innerHTML = format_time(timer.b);
+    document.querySelector(`#w-player .timer span`).innerHTML = format_time(timer.w);
+
+    render_board(game.move);
+}
+
 function format_time(seconds) {
     return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 function update_timer() {
-    if (timer) {
+    if (!gameover) {
         if (timer[turn]) {
             timer[turn]--;
 
@@ -194,7 +242,9 @@ function click_square(square) {
 function drag_start(square) {
     remove_overlays();
 
-    if (board[Math.floor(square.id / 10)][square.id % 10][0] == turn) {
+    const piece_color = board[Math.floor(square.id / 10)][square.id % 10][0];
+
+    if (piece_color == turn && (gamemode == "online" ? piece_color == player_color[0] : true)) {
         from_square = square;
 
         square.insertAdjacentHTML("afterbegin", "<span class='highlight-overlay'></span>");
@@ -226,7 +276,11 @@ function drop(square) {
         apply_move(move);
         render_board(move);
 
-        if (players == "AI") setTimeout(() => play_AI_move(), 100);
+        if (!gameover && players == "AI") {
+            setTimeout(() => play_AI_move(), 100);
+        } else if (gamemode == "online") {
+            ws.send(get_game_string(move));
+        }
     } else {
         remove_overlays();
 
@@ -235,7 +289,7 @@ function drop(square) {
 }
 
 function show_popup(title, description) {
-    timer = null;
+    gameover = true;
 
     document.getElementById("undo-button").disabled = true;
     document.querySelector(`#${turn}-player .timer`).style.backgroundColor = "";
@@ -318,6 +372,25 @@ function render_board(move, custom_sfx=null) {
         document.querySelector(`#w-player .captured-score`).innerHTML = "";
     }
 
+    document.querySelector(`#${turn}-player .timer`).style.opacity = 1;
+    if (timer[turn] < 11) {
+        document.querySelector(`#${turn}-player .timer`).style.backgroundColor = "#af1e22";
+        document.querySelector(`#${turn}-player .timer img`).src = "assets/timer/white-clock.png";
+        document.querySelector(`#${turn}-player .timer span`).style.color = "white";
+    }
+
+    if (turn == "w") {
+        document.querySelector(`#b-player .timer`).style.backgroundColor = "";
+        document.querySelector(`#b-player .timer`).style.opacity = 0.5;
+        document.querySelector(`#b-player .timer img`).src = "assets/timer/white-clock.png";
+        document.querySelector(`#b-player .timer span`).style.color = "";
+    } else {
+        document.querySelector(`#w-player .timer`).style.backgroundColor = "";
+        document.querySelector(`#w-player .timer`).style.opacity = 0.5;
+        document.querySelector(`#w-player .timer img`).src = "assets/timer/black-clock.png";
+        document.querySelector(`#w-player .timer span`).style.color = "";
+    }
+
     const special_draw = get_special_draw();
 
     if (special_draw) {
@@ -336,25 +409,6 @@ function render_board(move, custom_sfx=null) {
         }
     } else if (in_check()) {
         custom_sfx = "move-check";
-    }
-
-    document.querySelector(`#${turn}-player .timer`).style.opacity = 1;
-    if (timer[turn] < 11) {
-        document.querySelector(`#${turn}-player .timer`).style.backgroundColor = "#af1e22";
-        document.querySelector(`#${turn}-player .timer img`).src = "assets/timer/white-clock.png";
-        document.querySelector(`#${turn}-player .timer span`).style.color = "white";
-    }
-
-    if (turn == "w") {
-        document.querySelector(`#b-player .timer`).style.backgroundColor = "";
-        document.querySelector(`#b-player .timer`).style.opacity = 0.5;
-        document.querySelector(`#b-player .timer img`).src = "assets/timer/white-clock.png";
-        document.querySelector(`#b-player .timer span`).style.color = "";
-    } else {
-        document.querySelector(`#w-player .timer`).style.backgroundColor = "";
-        document.querySelector(`#w-player .timer`).style.opacity = 0.5;
-        document.querySelector(`#w-player .timer img`).src = "assets/timer/black-clock.png";
-        document.querySelector(`#w-player .timer span`).style.color = "";
     }
 
     (new Audio(`assets/sfx/${custom_sfx ?? sfx}.webm`)).play();
@@ -688,107 +742,23 @@ function get_king_moves(row, column, include_casting=true) {
     return moves;
 }
 
-function play_AI_move() {
-    document.querySelector(".board").style.pointerEvents = "none";
-
-    let best_move;
-    let best_move_score = -Infinity;
-
-    for (let row = 0 ; row < 8 ; row++) {
-        for (let column = 0 ; column < 8 ; column++) {
-            if (board[row][column][0] == turn) {
-                for (const move of get_possible_moves(row, column)) {
-                    const full_move = {
-                        from: { row, column },
-                        to: move
-                    };
-
-                    apply_move(full_move);
-                    const score = minimax(AI_difficulty - 1, -Infinity, Infinity);
-                    undo_move();
-
-                    if (score > best_move_score) {
-                        best_move_score = score;
-                        best_move = full_move;
-                    }
-                }
-            }
-        }
-    }
-
-    if (best_move) {
-        document.querySelector(".board").style.pointerEvents = "";
-
-        apply_move(best_move);
-        render_board(best_move);
-    }
-}
-
-function evaluate_board() {
-    const pieces_heat_map = {
-        p : [
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-            [0.1, 0.1, 0.2, 0.3, 0.3, 0.2, 0.1, 0.1],
-            [0.05, 0.05, 0.1, 0.25, 0.25, 0.1, 0.05, 0.05],
-            [0.0, 0.0, 0.0, 0.2, 0.2, 0.0, 0.0, 0.0],
-            [0.05, -0.05, -0.1, 0.0, 0.0, -0.1, -0.05, 0.05],
-            [0.05, 0.1, 0.1, -0.2, -0.2, 0.1, 0.1, 0.05],
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-        ], n : [
-            [-0.5, -0.4, -0.3, -0.3, -0.3, -0.3, -0.4, -0.5],
-            [-0.4, -0.2, 0.0, 0.0, 0.0, 0.0, -0.2, -0.4],
-            [-0.3, 0.0, 0.1, 0.15, 0.15, 0.1, 0.0, -0.3],
-            [-0.3, 0.05, 0.15, 0.2, 0.2, 0.15, 0.05, -0.3],
-            [-0.3, 0.0, 0.15, 0.2, 0.2, 0.15, 0.0, -0.3],
-            [-0.3, 0.05, 0.1, 0.15, 0.15, 0.1, 0.05, -0.3],
-            [-0.4, -0.2, 0.0, 0.05, 0.05, 0.0, -0.2, -0.4],
-            [-0.5, -0.4, -0.3, -0.3, -0.3, -0.3, -0.4, -0.5]
-        ], b : [
-            [-0.2, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.2],
-            [-0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1],
-            [-0.1, 0.0, 0.05, 0.1, 0.1, 0.05, 0.0, -0.1],
-            [-0.1, 0.05, 0.05, 0.1, 0.1, 0.05, 0.05, -0.1],
-            [-0.1, 0.0, 0.1, 0.1, 0.1, 0.1, 0.0, -0.1],
-            [-0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -0.1],
-            [-0.1, 0.05, 0.0, 0.0, 0.0, 0.0, 0.05, -0.1],
-            [-0.2, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.2]
-        ], r : [
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.05, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.05],
-            [-0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.05],
-            [-0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.05],
-            [-0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.05],
-            [-0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.05],
-            [-0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.05],
-            [0.0, 0.0, 0.0, 0.05, 0.05, 0.0, 0.0, 0.0]
-        ], q : [
-            [-0.2, -0.1, -0.1, -0.05, -0.05, -0.1, -0.1, -0.2],
-            [-0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1],
-            [-0.1, 0.0, 0.05, 0.05, 0.05, 0.05, 0.0, -0.1],
-            [-0.05, 0.0, 0.05, 0.05, 0.05, 0.05, 0.0, -0.05],
-            [0.0, 0.0, 0.05, 0.05, 0.05, 0.05, 0.0, -0.05],
-            [-0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.0, -0.1],
-            [-0.1, 0.0, 0.05, 0.0, 0.0, 0.0, 0.0, -0.1],
-            [-0.2, -0.1, -0.1, -0.05, -0.05, -0.1, -0.1, -0.2]
-        ], k : [
-            [-0.3, -0.4, -0.4, -0.5, -0.5, -0.4, -0.4, -0.3],
-            [-0.3, -0.4, -0.4, -0.5, -0.5, -0.4, -0.4, -0.3],
-            [-0.3, -0.4, -0.4, -0.5, -0.5, -0.4, -0.4, -0.3],
-            [-0.3, -0.4, -0.4, -0.5, -0.5, -0.4, -0.4, -0.3],
-            [-0.2, -0.3, -0.3, -0.4, -0.4, -0.3, -0.3, -0.2],
-            [-0.1, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.1],
-            [0.2, 0.2, 0.0, 0.0, 0.0, 0.0, 0.2, 0.2],
-            [0.2, 0.3, 1.0, 0.0, 0.0, 0.0, 1.0, 0.2]
-        ]
-    };
+function evaluate_move(move) {
     const pieces_value_map = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
     let score = 0;
 
-    for (let row = 0 ; row < 8 ; row++) {
-        for (let column = 0 ; column < 8 ; column++) {
-            if (board[row][column]) {
-                score += (board[row][column][0] == turn ? 1 : -1) * (pieces_value_map[board[row][column][1]] + pieces_heat_map[board[row][column][1]][board[row][column][0] == "w" ? row : 7 - row][column]);
+    const moved_piece = board[move.from.row][move.from.column];
+    const captured_piece = (moved_piece[1] == "p" && en_passant.row == move.to.row && en_passant.column == move.to.column) ? "p" :  board[move.to.row][move.to.column][1];
+
+    if (captured_piece) score += 10 * pieces_value_map[captured_piece] - pieces_value_map[moved_piece[1]];
+    if (moved_piece[1] == "p" && move.to.row % 7 == 0) score += pieces_value_map.q;
+
+    const next_row = move.to.row + moved_piece[0] == "w" ? -1 : 1;
+
+    for (const side_column of [move.to.column - 1, move.to.column + 1]) {
+        if (in_bounds(next_row, side_column)) {
+            if (board[next_row][side_column][0] != moved_piece[0] && board[next_row][side_column][1] == "p") {
+                score -= pieces_value_map[moved_piece[1]];
+                break;
             }
         }
     }
@@ -796,47 +766,262 @@ function evaluate_board() {
     return score;
 }
 
-function minimax(depth, alpha, beta) {
-    const is_AI_turn = (AI_difficulty - depth) % 2 == 0;
-
-    if (get_special_draw()) {
-        return -500 - depth;
-    } else if (!is_possible_moves()) {
-        if (in_check()) {
-            return (is_AI_turn ? 1 : -1) * (-1000 - depth);
-        } else {
-            return -500 - depth;
-        }
-    } else if (depth == 0) {
-        return (is_AI_turn ? 1 : -1) * evaluate_board();
-    }
-
-    let best_move_score = (is_AI_turn ? 1 : -1) * -Infinity;
+function get_all_moves(first_move=null) {
+    const moves = [];
 
     for (let row = 0 ; row < 8 ; row++) {
         for (let column = 0 ; column < 8 ; column++) {
             if (board[row][column][0] == turn) {
                 for (const move of get_possible_moves(row, column)) {
-                    apply_move({
+                    moves.push({
                         from: { row, column },
                         to: move
                     });
-                    const score = minimax(depth - 1, alpha, beta);
-                    undo_move();
-
-                    if (is_AI_turn) {
-                        if (score > best_move_score) best_move_score = score;
-                        if (score > alpha) alpha = score;
-                    } else {
-                        if (score < best_move_score) best_move_score = score;
-                        if (score < beta) beta = score;
-                    }
-
-                    if (beta <= alpha) return best_move_score;
                 }
             }
         }
     }
 
-    return best_move_score;
+    moves.sort((a, b) => evaluate_move(b) - evaluate_move(a));
+
+    if (first_move) {
+        moves.splice(moves.indexOf(first_move), 1);
+        moves.unshift(first_move);
+    }
+
+    return moves;
+}
+
+function continue_minimax() {
+    return (performance.now() - minimax_start_time) <= AI_difficulty * 200;
+}
+
+function play_AI_move() {
+    document.querySelector(".board").style.pointerEvents = "none";
+
+    minimax_start_time = performance.now();
+
+    let best_move;
+    let best_move_score = -Infinity;
+
+    for (let depth = 1 ; continue_minimax() ; depth++) {
+        for (const move of get_all_moves(first_move=best_move)) {
+            apply_move(move);
+
+            let current_move;
+
+            if (get_special_draw()) {
+                current_move = { score: 0 };
+            } else {
+                const current_board_state = get_board_state();
+                const transposition = transposition_table[current_board_state];
+
+                if (transposition && transposition.depth >= depth - 1 && transposition.flag == "EXACT") {
+                    current_move = { score: transposition.score };
+                } else {
+                    current_move = minimax(depth - 1, -Infinity, Infinity);
+                    if (current_move.cache) transposition_table[current_board_state] = { score: current_move.score, depth: depth - 1, flag: "EXACT" };
+                }
+            }
+
+            undo_move();
+
+            if (current_move.ignore) {
+                break;
+            } else if (current_move.score > best_move_score) {
+                best_move_score = current_move.score;
+                best_move = move;
+            }
+        }
+    }
+
+    document.querySelector(".board").style.pointerEvents = "";
+
+    apply_move(best_move);
+    render_board(best_move);
+}
+
+function minimax(depth, alpha, beta) {
+    const is_AI_turn = turn != player_color[0];
+
+    if (!continue_minimax()) {
+        return { ignore: true, cache: false };
+    } else if (!is_possible_moves()) {
+        if (in_check()) {
+            return { score: (is_AI_turn ? 1 : -1) * (-1000 - depth), cache: true };
+        } else {
+            return { score: 0, cache: true };
+        }
+    } else if (depth == 0) {
+        return { score: (is_AI_turn ? 1 : -1) * evaluate_board(), cache: true };
+    }
+
+    const original_alpha = alpha;
+    const original_beta = beta;
+    let best_move = { score: is_AI_turn ? -Infinity : Infinity };
+
+    for (const move of get_all_moves()) {
+        apply_move(move);
+
+        const special_draw = get_special_draw();
+        let current_move;
+
+        if (special_draw) {
+            current_move = { score: 0, cache: special_draw == "Insufficient Material" };
+        } else {
+            const current_board_state = get_board_state();
+            const transposition = transposition_table[current_board_state];
+
+            if (transposition && transposition.depth >= depth - 1 && (transposition.flag == "EXACT" || (transposition.flag == "LOWER" && transposition.score >= beta) || (transposition.flag == "UPPER" && transposition.score <= alpha))) {
+                current_move = { score: transposition.score, cache: true };
+            } else {
+                current_move = minimax(depth - 1, alpha, beta);
+
+                if (current_move.cache) {
+                    let flag = "EXACT";
+
+                    if (current_move.score >= original_beta) {
+                        flag = "LOWER";
+                    } else if (current_move.score <= original_alpha) {
+                        flag = "UPPER";
+                    }
+
+                    transposition_table[current_board_state] = { score: current_move.score, depth: depth - 1, flag };
+                }
+            }
+        }
+
+        undo_move();
+
+        if (current_move.ignore) {
+            return current_move;
+        } else {
+            if (is_AI_turn) {
+                if (current_move.score > best_move.score) best_move = current_move;
+                if (current_move.score > alpha) alpha = current_move.score;
+            } else {
+                if (current_move.score < best_move.score) best_move = current_move;
+                if (current_move.score < beta) beta = current_move.score;
+            }
+    
+            if (beta <= alpha) break;
+        }
+    }
+
+    return best_move;
+}
+
+function evaluate_board() {
+    const pieces_heat_map = {
+        earlygame: {
+            p: [
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+                [0.1, 0.1, 0.2, 0.3, 0.3, 0.2, 0.1, 0.1],
+                [0.05, 0.05, 0.1, 0.25, 0.25, 0.1, 0.05, 0.05],
+                [0.0, 0.0, 0.0, 0.2, 0.2, 0.0, 0.0, 0.0],
+                [0.05, -0.05, -0.1, 0.0, 0.0, -0.1, -0.05, 0.05],
+                [0.05, 0.1, 0.1, -0.2, -0.2, 0.1, 0.1, 0.05],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            ], n: [
+                [-0.5, -0.4, -0.3, -0.3, -0.3, -0.3, -0.4, -0.5],
+                [-0.4, -0.2, 0.0, 0.0, 0.0, 0.0, -0.2, -0.4],
+                [-0.3, 0.0, 0.1, 0.15, 0.15, 0.1, 0.0, -0.3],
+                [-0.3, 0.05, 0.15, 0.2, 0.2, 0.15, 0.05, -0.3],
+                [-0.3, 0.0, 0.15, 0.2, 0.2, 0.15, 0.0, -0.3],
+                [-0.3, 0.05, 0.1, 0.15, 0.15, 0.1, 0.05, -0.3],
+                [-0.4, -0.2, 0.0, 0.05, 0.05, 0.0, -0.2, -0.4],
+                [-0.5, -0.4, -0.3, -0.3, -0.3, -0.3, -0.4, -0.5]
+            ], b: [
+                [-0.2, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.2],
+                [-0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1],
+                [-0.1, 0.0, 0.05, 0.1, 0.1, 0.05, 0.0, -0.1],
+                [-0.1, 0.05, 0.05, 0.1, 0.1, 0.05, 0.05, -0.1],
+                [-0.1, 0.0, 0.1, 0.1, 0.1, 0.1, 0.0, -0.1],
+                [-0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -0.1],
+                [-0.1, 0.05, 0.0, 0.0, 0.0, 0.0, 0.05, -0.1],
+                [-0.2, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1, -0.2]
+            ], r: [
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.05, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.05],
+                [-0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.05],
+                [-0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.05],
+                [-0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.05],
+                [-0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.05],
+                [-0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.05],
+                [0.0, 0.0, 0.0, 0.05, 0.05, 0.0, 0.0, 0.0]
+            ], q: [
+                [-0.2, -0.1, -0.1, -0.05, -0.05, -0.1, -0.1, -0.2],
+                [-0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1],
+                [-0.1, 0.0, 0.05, 0.05, 0.05, 0.05, 0.0, -0.1],
+                [-0.05, 0.0, 0.05, 0.05, 0.05, 0.05, 0.0, -0.05],
+                [0.0, 0.0, 0.05, 0.05, 0.05, 0.05, 0.0, -0.05],
+                [-0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.0, -0.1],
+                [-0.1, 0.0, 0.05, 0.0, 0.0, 0.0, 0.0, -0.1],
+                [-0.2, -0.1, -0.1, -0.05, -0.05, -0.1, -0.1, -0.2]
+            ], k: [
+                [-0.3, -0.4, -0.4, -0.5, -0.5, -0.4, -0.4, -0.3],
+                [-0.3, -0.4, -0.4, -0.5, -0.5, -0.4, -0.4, -0.3],
+                [-0.3, -0.4, -0.4, -0.5, -0.5, -0.4, -0.4, -0.3],
+                [-0.3, -0.4, -0.4, -0.5, -0.5, -0.4, -0.4, -0.3],
+                [-0.2, -0.3, -0.3, -0.4, -0.4, -0.3, -0.3, -0.2],
+                [-0.1, -0.2, -0.2, -0.2, -0.2, -0.2, -0.2, -0.1],
+                [0.2, 0.2, 0.0, 0.0, 0.0, 0.0, 0.2, 0.2],
+                [0.2, 0.3, 1.0, 0.0, 0.0, 0.0, 1.0, 0.2]
+            ]
+        }, endgame: {
+            p: [
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8],
+                [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+                [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3],
+                [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2],
+                [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+            ], k: [
+                [-0.5, -0.4, -0.3, -0.3, -0.3, -0.3, -0.4, -0.5],
+                [-0.4, -0.2, -0.1, 0.0, 0.0, -0.1, -0.2, -0.4],
+                [-0.3, -0.1, 0.1, 0.2, 0.2, 0.1, -0.1, -0.3],
+                [-0.3, 0.0, 0.2, 0.4, 0.4, 0.2, 0.0, -0.3],
+                [-0.3, 0.0, 0.2, 0.4, 0.4, 0.2, 0.0, -0.3],
+                [-0.3, -0.1, 0.1, 0.2, 0.2, 0.1, -0.1, -0.3],
+                [-0.4, -0.2, -0.1, 0.0, 0.0, -0.1, -0.2, -0.4],
+                [-0.5, -0.4, -0.3, -0.3, -0.3, -0.3, -0.4, -0.5]
+            ]
+        }
+    }
+
+    const pieces_value_map = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+
+    let pieces = 0;
+
+    for (let row = 0 ; row < 8 ; row++) {
+        for (let column = 0 ; column < 8 ; column++) {
+            if (board[row][column]) pieces++;
+        }
+    }
+
+    let score = 0;
+    const kings_positions = {};
+
+    for (let row = 0 ; row < 8 ; row++) {
+        for (let column = 0 ; column < 8 ; column++) {
+            if (board[row][column]) {
+                score += (board[row][column][0] == turn ? 1 : -1) * (pieces_value_map[board[row][column][1]] + (pieces / 32) * pieces_heat_map.earlygame[board[row][column][1]][board[row][column][0] == "w" ? row : 7 - row][column]);
+
+                if (board[row][column][1] == "p") {
+                    score += (board[row][column][0] == turn ? 1 : -1) * (1 - pieces / 32) * pieces_heat_map.endgame.p[board[row][column][0] == "w" ? row : 7 - row][column];
+                } else if (board[row][column][1] == "k") {
+                    score += (board[row][column][0] == turn ? 1 : -1) * (1 - pieces / 32) * pieces_heat_map.endgame.k[row][column];
+
+                    kings_positions[board[row][column][0]] = { row, column };
+                }
+            }
+        }
+    }
+
+    score += (score > 0 ? 1 : -1) * (1 - pieces / 32) * (12 - Math.sqrt((kings_positions.w.row - kings_positions.b.row) ** 2 + (kings_positions.w.column - kings_positions.b.column) ** 2));
+
+    return score;
 }
