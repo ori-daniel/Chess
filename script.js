@@ -142,7 +142,7 @@ function start_game() {
         if (player_color == "black") setTimeout(() => play_AI_move(), 100);
     } else {
         if (gamemode == "online") {
-            if (!ws) ws = new WebSocket("ws://ws.oridaniel.com");
+            if (!ws) ws = new WebSocket("wss://ws.oridaniel.com");
 
             ws.onmessage = function (event) {
                 if (event.data) {
