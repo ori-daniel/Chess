@@ -3,6 +3,12 @@ let players, AI_difficulty, gamemode, time, player_color, timer, gameover, undo_
 reset_options();
 
 function reset_options() {
+    gameover = true;
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+
     document.querySelector(".homepage").style.display = "";
     document.querySelector(".game").style.display = "";
 
@@ -11,8 +17,6 @@ function reset_options() {
     update_gamemode("local");
     update_time("rapid");
     update_player_color("white");
-
-    gameover = true;
 }
 
 function update_players(updated_players) {
@@ -71,6 +75,7 @@ function start_game() {
     document.querySelector(".homepage").style.display = "none";
     document.querySelector(".game").style.display = "flex";
     document.getElementById("undo-button").disabled = false;
+    document.getElementById("undo-button").style.display = gamemode == "online" ? "none" : "";
     document.querySelector(`#b-player .captured-pieces`).innerHTML = "";
     document.querySelector(`#b-player .captured-score`).innerHTML = "";
     document.querySelector(`#b-player .timer`).style.backgroundColor = "";
@@ -171,6 +176,7 @@ function get_game_string(move) {
         castling,
         board,
         turn,
+        board_states,
         sfx,
         move
     });
@@ -186,6 +192,7 @@ function load_game_string(game_string) {
     castling = game.castling;
     board = game.board;
     turn = game.turn;
+    board_states = game.board_states;
     sfx = game.sfx;
 
     document.querySelector(`#b-player .timer span`).innerHTML = format_time(timer.b);
