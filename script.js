@@ -297,6 +297,10 @@ function drop(square) {
 
 function show_popup(title, description) {
     gameover = true;
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
 
     document.getElementById("undo-button").disabled = true;
     document.querySelector(`#${turn}-player .timer`).style.backgroundColor = "";
