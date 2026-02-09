@@ -152,6 +152,11 @@ function start_game() {
             ws.onmessage = function (event) {
                 if (event.data) {
                     load_game_string(event.data);
+
+                    if (gameover) {
+                        ws.close();
+                        ws = null;
+                    }
                 } else {
                     (new Audio("assets/sfx/game-start.webm")).play();
                 }
@@ -287,6 +292,11 @@ function drop(square) {
             setTimeout(() => play_AI_move(), 100);
         } else if (gamemode == "online") {
             ws.send(get_game_string(move));
+
+            if (gameover) {
+                ws.close();
+                ws = null;
+            }
         }
     } else {
         remove_overlays();
@@ -297,10 +307,6 @@ function drop(square) {
 
 function show_popup(title, description) {
     gameover = true;
-    if (ws) {
-        ws.close();
-        ws = null;
-    }
 
     document.getElementById("undo-button").disabled = true;
     document.querySelector(`#${turn}-player .timer`).style.backgroundColor = "";
