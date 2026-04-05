@@ -17,7 +17,7 @@ def log(title, game):
     print("=" * len(title))
 
 async def handler(ws):
-    response = requests.get("http://localhost:5175?handler=CheckLogin", headers = { "Cookie": ws.request.headers.get("Cookie") })
+    response = requests.get("http://localhost:5000?handler=CheckLogin", headers = { "Cookie": ws.request.headers.get("Cookie") })
     data = response.json()
 
     query_params = dict(parse_qsl(urlparse(ws.request.path).query))
