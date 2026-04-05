@@ -339,7 +339,7 @@ async function launch_game() {
 
             document.querySelector(".loading-overlay").style.display = "flex";
 
-            ws = new WebSocket(`ws://localhost:8765?player_color=${player_color}&opponent_username=${opponent_username}`);
+            ws = new WebSocket(`${location.hostname == "localhost" ? "ws://localhost:8765" : "wss://chess.oridaniel.com/ws"}?player_color=${player_color}&opponent_username=${opponent_username}`);
 
             ws.onmessage = async function (event) {
                 if (event.data == "error") {
