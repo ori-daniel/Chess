@@ -9,7 +9,7 @@ builder.Services.AddRazorPages();
 
 var app = builder.Build();
 
-Process.Start("python3", "server.py");
+Process.Start("python3", "-u server.py");
 
 _ = Task.Run(async () => {
     while (true) {

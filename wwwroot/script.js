@@ -333,6 +333,8 @@ function update_player_color(updated_player_color) {
 }
 
 async function launch_game() {
+    if (player_color == "random") player_color = Math.random() < 0.5 ? "white" : "black";
+
     if (players == "people" && gamemode == "online") {
         if (document.querySelector("#opponent-username input").checkValidity()) {
             opponent_username = document.querySelector("#opponent-username input").value;
@@ -379,6 +381,8 @@ async function launch_game() {
             document.querySelector("#opponent-username input").reportValidity();
         }
     } else {
+        if (players == "people" && gamemode == "local") player_color = "white";
+
         await start_game();
     }
 }
@@ -436,12 +440,6 @@ async function start_game(play_game_start_sfx=true) {
     turn = "w";
     board_states = [get_board_state()];
     transposition_table = {};
-
-    if (players == "people" && gamemode == "local") {
-        player_color = "white";
-    } else if (player_color == "random") {
-        player_color = Math.random() < 0.5 ? "white" : "black";
-    }
 
     document.querySelector(".game").style.flexDirection = player_color == "white" ? "column" : "column-reverse";
     const start = player_color == "white" ? 0 : 7;
