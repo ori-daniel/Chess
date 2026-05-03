@@ -1,4 +1,5 @@
 // dotnet add package Microsoft.Data.Sqlite
+// dotnet add package BCrypt.Net-Next
 
 using System.Diagnostics;
 using Microsoft.Data.Sqlite;

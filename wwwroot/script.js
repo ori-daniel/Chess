@@ -533,6 +533,12 @@ function update_timer() {
         } else {
             winner = turn == "w" ? "black" : "white";
 
+            if (players == "people" && gamemode == "online") {
+                ws.send(JSON.stringify({ winner }));
+                ws.close();
+                ws = null;
+            }
+
             show_popup(`${turn == "w" ? "Black" : "White"} Won!`, "Timeout");
 
             (new Audio("/assets/game/sfx/game-end.webm")).play();

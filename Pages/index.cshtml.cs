@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Data.Sqlite;
+using BCryptNet = BCrypt.Net.BCrypt;
 
 [IgnoreAntiforgeryToken]
 public class IndexModel : PageModel {
@@ -11,14 +12,14 @@ public class IndexModel : PageModel {
             SqliteConnection connection = new SqliteConnection("Data Source=App_Data/Database.sqlite3");
             connection.Open();
 
-            SqliteCommand tokenCommand = connection.CreateCommand();
-            tokenCommand.CommandText = "SELECT username, expires_at FROM sessions WHERE token = @token";
-            tokenCommand.Parameters.AddWithValue("@token", token);
-            SqliteDataReader tokenReader = tokenCommand.ExecuteReader();
+            SqliteCommand sessionCommand = connection.CreateCommand();
+            sessionCommand.CommandText = "SELECT username, expires_at FROM sessions WHERE token = @token";
+            sessionCommand.Parameters.AddWithValue("@token", token);
+            SqliteDataReader sessionReader = sessionCommand.ExecuteReader();
 
-            if (tokenReader.Read()) {
-                string username = tokenReader["username"].ToString() ?? "";
-                DateTime expiresAt = DateTime.Parse(tokenReader["expires_at"].ToString() ?? "");
+            if (sessionReader.Read()) {
+                string username = sessionReader["username"].ToString() ?? "";
+                DateTime expiresAt = DateTime.Parse(sessionReader["expires_at"].ToString() ?? "");
 
                 if (expiresAt > DateTime.UtcNow) {
                     connection.Close();
@@ -59,12 +60,12 @@ public class IndexModel : PageModel {
         SqliteConnection connection = new SqliteConnection("Data Source=App_Data/Database.sqlite3");
         connection.Open();
 
-        SqliteCommand passwordCommand = connection.CreateCommand();
-        passwordCommand.CommandText = "SELECT password FROM users WHERE username = @username";
-        passwordCommand.Parameters.AddWithValue("@username", username);
-        string storedPassword = passwordCommand.ExecuteScalar()?.ToString() ?? "";
+        SqliteCommand passwordHashCommand = connection.CreateCommand();
+        passwordHashCommand.CommandText = "SELECT password_hash FROM users WHERE username = @username";
+        passwordHashCommand.Parameters.AddWithValue("@username", username);
+        string storedPasswordHash = passwordHashCommand.ExecuteScalar()?.ToString() ?? "";
 
-        if (storedPassword != "" && storedPassword == password) {
+        if (storedPasswordHash != "" && BCryptNet.Verify(password, storedPasswordHash)) {
             string token = Guid.NewGuid().ToString();
             DateTime expiresAt = DateTime.UtcNow.AddDays(7);
 
@@ -97,10 +98,10 @@ public class IndexModel : PageModel {
         SqliteConnection connection = new SqliteConnection("Data Source=App_Data/Database.sqlite3");
         connection.Open();
 
-        SqliteCommand passwordCommand = connection.CreateCommand();
-        passwordCommand.CommandText = "SELECT password FROM users WHERE username = @username";
-        passwordCommand.Parameters.AddWithValue("@username", username);
-        bool userExists = passwordCommand.ExecuteScalar() != null;
+        SqliteCommand userExistsCommand = connection.CreateCommand();
+        userExistsCommand.CommandText = "SELECT 1 FROM users WHERE username = @username";
+        userExistsCommand.Parameters.AddWithValue("@username", username);
+        bool userExists = userExistsCommand.ExecuteScalar() != null;
 
         if (userExists) {
             connection.Close();
@@ -108,9 +109,9 @@ public class IndexModel : PageModel {
         }
 
         SqliteCommand userCommand = connection.CreateCommand();
-        userCommand.CommandText = "INSERT INTO users (username, password) VALUES (@username, @password)";
+        userCommand.CommandText = "INSERT INTO users (username, password_hash) VALUES (@username, @password_hash)";
         userCommand.Parameters.AddWithValue("@username", username);
-        userCommand.Parameters.AddWithValue("@password", password);
+        userCommand.Parameters.AddWithValue("@password_hash", BCryptNet.HashPassword(password, 12));
         userCommand.ExecuteNonQuery();
 
         connection.Close();
@@ -130,19 +131,19 @@ public class IndexModel : PageModel {
         while (usersReader.Read()) {
             string username = usersReader["username"].ToString() ?? "";
 
-            SqliteCommand historyCommand = connection.CreateCommand();
-            historyCommand.CommandText = "SELECT * FROM games WHERE white = @username OR black = @username";
-            historyCommand.Parameters.AddWithValue("@username", username);
-            SqliteDataReader historyReader = historyCommand.ExecuteReader();
+            SqliteCommand gamesCommand = connection.CreateCommand();
+            gamesCommand.CommandText = "SELECT * FROM games WHERE white = @username OR black = @username";
+            gamesCommand.Parameters.AddWithValue("@username", username);
+            SqliteDataReader gamesReader = gamesCommand.ExecuteReader();
 
             int won = 0;
             int draw = 0;
             int lost = 0;
 
-            while (historyReader.Read()) {
-                if (historyReader["winner"].ToString() == "draw") {
+            while (gamesReader.Read()) {
+                if (gamesReader["winner"].ToString() == "draw") {
                     draw++;
-                } else if (historyReader[historyReader["winner"].ToString() ?? ""].ToString() == username) {
+                } else if (gamesReader[gamesReader["winner"].ToString() ?? ""].ToString() == username) {
                     won++;
                 } else {
                     lost++;
@@ -171,29 +172,29 @@ public class IndexModel : PageModel {
             SqliteConnection connection = new SqliteConnection("Data Source=App_Data/Database.sqlite3");
             connection.Open();
 
-            SqliteCommand tokenCommand = connection.CreateCommand();
-            tokenCommand.CommandText = "SELECT username, expires_at FROM sessions WHERE token = @token";
-            tokenCommand.Parameters.AddWithValue("@token", token);
-            SqliteDataReader tokenReader = tokenCommand.ExecuteReader();
+            SqliteCommand sessionCommand = connection.CreateCommand();
+            sessionCommand.CommandText = "SELECT username, expires_at FROM sessions WHERE token = @token";
+            sessionCommand.Parameters.AddWithValue("@token", token);
+            SqliteDataReader sessionReader = sessionCommand.ExecuteReader();
 
-            if (tokenReader.Read()) {
-                string username = tokenReader["username"].ToString() ?? "";
-                DateTime expiresAt = DateTime.Parse(tokenReader["expires_at"].ToString() ?? "");
+            if (sessionReader.Read()) {
+                string username = sessionReader["username"].ToString() ?? "";
+                DateTime expiresAt = DateTime.Parse(sessionReader["expires_at"].ToString() ?? "");
 
                 if (expiresAt > DateTime.UtcNow) {
-                    SqliteCommand historyCommand = connection.CreateCommand();
-                    historyCommand.CommandText = "SELECT * FROM games WHERE white = @username OR black = @username ORDER BY date DESC";
-                    historyCommand.Parameters.AddWithValue("@username", username);
-                    SqliteDataReader historyReader = historyCommand.ExecuteReader();
+                    SqliteCommand gamesCommand = connection.CreateCommand();
+                    gamesCommand.CommandText = "SELECT * FROM games WHERE white = @username OR black = @username ORDER BY date DESC";
+                    gamesCommand.Parameters.AddWithValue("@username", username);
+                    SqliteDataReader gamesReader = gamesCommand.ExecuteReader();
 
                     List<Dictionary<string, string>> history = new List<Dictionary<string, string>>();
 
-                    while (historyReader.Read()) {
+                    while (gamesReader.Read()) {
                         history.Add(new Dictionary<string, string> {
-                            { "white", historyReader["white"].ToString() ?? "" },
-                            { "black", historyReader["black"].ToString() ?? "" },
-                            { "result", historyReader["winner"].ToString() == "draw" ? "draw" : (historyReader[historyReader["winner"].ToString() ?? ""].ToString() == username ? "won" : "lost") },
-                            { "date", DateTime.Parse(historyReader["date"].ToString() ?? "").ToString("dd/MM/yy") }
+                            { "white", gamesReader["white"].ToString() ?? "" },
+                            { "black", gamesReader["black"].ToString() ?? "" },
+                            { "result", gamesReader["winner"].ToString() == "draw" ? "draw" : (gamesReader[gamesReader["winner"].ToString() ?? ""].ToString() == username ? "won" : "lost") },
+                            { "date", DateTime.Parse(gamesReader["date"].ToString() ?? "").ToString("dd/MM/yy") }
                         });
                     }
 

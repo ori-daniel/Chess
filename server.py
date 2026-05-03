@@ -63,12 +63,13 @@ async def handler(ws):
 
         try:
             async for message in ws:
-                current_game["game_string"] = message
+                if (json.loads(message).get("move")):
+                    current_game["game_string"] = message
 
-                if current_game[opponent_color]["ws"]:
-                    await current_game[opponent_color]["ws"].send(message)
+                    if current_game[opponent_color]["ws"]:
+                        await current_game[opponent_color]["ws"].send(message)
 
-                if (json.loads(message).get("winner")):
+                if (current_game in games and json.loads(message).get("winner")):
                     games.remove(current_game)
 
                     connection = sqlite3.connect("App_Data/Database.sqlite3")
