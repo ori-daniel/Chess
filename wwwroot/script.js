@@ -25,7 +25,7 @@ function validate_usename(username_input) {
 }
 
 function validate_password(password_input) {
-    password_input.value = password_input.value.replace(" ", "").slice(0, 12);
+    password_input.value = password_input.value.replace(/\s/g, "").slice(0, 12);
 
     password_input.parentElement.querySelector(".toggle-password-visibility-button").style.display = password_input.value ? "block" : "";
 }
@@ -68,9 +68,15 @@ async function login(event) {
         document.querySelector(".login").style.display = "none";
         document.querySelector("h1").innerHTML = `Welcome To Chess, ${username}!`;
     } else {
-        const error_message = document.querySelector("#login-form #error-message");
-        error_message.style.display = "flex";
-        setTimeout(() => error_message.style.display = "", 1500);
+        const data = await response.json();
+
+        document.querySelector("#login-form #error-message").style.display = "flex";
+        document.querySelector("#login-form #error-text").innerHTML = data.error;
+
+        setTimeout(() => {
+            document.querySelector("#login-form #error-message").style.display = "";
+            document.querySelector("#login-form #error-text").innerHTML = "";
+        }, 1500);
     }
 }
 
@@ -124,9 +130,15 @@ async function sign_up(event) {
             switch_to_form("login");
         }, 1500);
     } else {
-        const error_message = document.querySelector("#sign-up-form #error-message");
-        error_message.style.display = "flex";
-        setTimeout(() => error_message.style.display = "", 1500);
+        const data = await response.json();
+
+        document.querySelector("#sign-up-form #error-message").style.display = "flex";
+        document.querySelector("#sign-up-form #error-text").innerHTML = data.error;
+
+        setTimeout(() => {
+            document.querySelector("#sign-up-form #error-message").style.display = "";
+            document.querySelector("#sign-up-form #error-text").innerHTML = "";
+        }, 1500);
     }
 }
 

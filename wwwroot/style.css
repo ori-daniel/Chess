@@ -170,11 +170,11 @@ h2 {
 }
 
 .form-message {
-    font-weight: bold;
     display: none;
     justify-content: center;
     align-items: center;
     gap: 10px;
+    font-weight: bold;
 }
 
 #error-message {

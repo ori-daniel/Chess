@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using BCryptNet = BCrypt.Net.BCrypt;
 
@@ -54,8 +55,12 @@ public class IndexModel : PageModel {
     }
 
     public IActionResult OnPostLogin([FromBody] Dictionary<string, string> data) {
-        string username = data["username"];
-        string password = data["password"];
+        if (!data.ContainsKey("username") || !data.ContainsKey("password")) return new JsonResult(new { error = "Missing Credentials" }) { StatusCode = 400 };
+
+        string username = data["username"] ?? "";
+        string password = data["password"] ?? "";
+
+        if (!Regex.IsMatch(username, @"^[A-Za-z0-9-]+$") || password == "" || password.Any(char.IsWhiteSpace) || password.Length > 12) return new JsonResult(new { error = "Invalid Credentials Values" }) { StatusCode = 400 };
 
         SqliteConnection connection = new SqliteConnection("Data Source=App_Data/Database.sqlite3");
         connection.Open();
@@ -92,8 +97,12 @@ public class IndexModel : PageModel {
     }
 
     public IActionResult OnPostSignUp([FromBody] Dictionary<string, string> data) {
-        string username = data["username"];
-        string password = data["password"];
+        if (!data.ContainsKey("username") || !data.ContainsKey("password")) return new JsonResult(new { error = "Missing Credentials" }) { StatusCode = 400 };
+
+        string username = data["username"] ?? "";
+        string password = data["password"] ?? "";
+
+        if (!Regex.IsMatch(username, @"^[A-Za-z0-9-]+$") || password == "" || password.Any(char.IsWhiteSpace) || password.Length > 12) return new JsonResult(new { error = "Invalid Credentials Values" }) { StatusCode = 400 };
 
         SqliteConnection connection = new SqliteConnection("Data Source=App_Data/Database.sqlite3");
         connection.Open();
