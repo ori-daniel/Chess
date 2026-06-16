@@ -1,22 +1,63 @@
-let username, players, AI_difficulty, gamemode, time, player_color, opponent_username, book_moves, timer, winner, undo_stack, fifty_move_counter, en_passant, castling, board, turn, board_states, transposition_table, minimax_start_time, ws, sfx, from_square;
+let username, role, has_profile_picture, profile, players, AI_engine, AI_difficulty, gamemode, time, player_color, opponent_username, book_moves, stockfish_engine, timer, winner, undo_stack, moves_stack, fifty_move_counter, en_passant, castling, board, turn, board_states, transposition_table, minimax_start_time, ws, sfx, from_square;
 
 reset_home();
 switch_to_form("login");
 check_login();
 
+function reset_home() {
+    if (stockfish_engine) {
+        stockfish_engine.terminate();
+        stockfish_engine = null;
+    }
+
+    winner = "pending";
+
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+
+    document.querySelector(".home").style.display = "";
+    document.querySelector(".game").style.display = "";
+
+    switch_to_tab("play");
+
+    update_players("people");
+    update_AI_engine("local");
+    update_AI_difficulty(10);
+    update_gamemode("local");
+    update_time("rapid");
+    update_player_color("white");
+
+    opponent_username = null;
+    document.querySelector("#opponent-username input").value = "";
+}
+
+function switch_to_form(form) {
+    document.getElementById(`${form == "login" ? "sign-up" : "login"}-form`).style.display = "none";
+    document.getElementById(`${form}-form`).style.display = "";
+    document.querySelector(`#${form}-form #username`).focus();
+}
+
 async function check_login() {
     document.querySelector(".loading-overlay").style.display = "flex";
 
     const response = await fetch("?handler=CheckLogin");
-    const data = await response.json();
 
     document.querySelector(".loading-overlay").style.display = "";
 
     if (response.ok) {
+        const data = await response.json();
+
         username = data.username;
+        role = data.role;
+        has_profile_picture = data.has_profile_picture;
 
         document.querySelector(".login").style.display = "none";
+        document.querySelector(".home .profile-picture").src = `/profile-pictures/users/${username}.png`;
         document.querySelector("h1").innerHTML = `Welcome To Chess, ${username}!`;
+
+        if (role == "admin" || role == "super_admin") document.getElementById("users-tab-button").style.display = "flex";
     }
 }
 
@@ -60,16 +101,21 @@ async function login(event) {
         })
     });
 
+    const data = await response.json();
+
     document.querySelector(".loading-overlay").style.display = "";
 
     if (response.ok) {
         username = document.querySelector("#login-form #username").value;
+        role = data.role;
+        has_profile_picture = data.has_profile_picture;
 
         document.querySelector(".login").style.display = "none";
+        document.querySelector(".home .profile-picture").src = `/profile-pictures/users/${username}.png`;
         document.querySelector("h1").innerHTML = `Welcome To Chess, ${username}!`;
-    } else {
-        const data = await response.json();
 
+        if (role == "admin" || role == "super_admin") document.getElementById("users-tab-button").style.display = "flex";
+    } else {
         document.querySelector("#login-form #error-message").style.display = "flex";
         document.querySelector("#login-form #error-text").innerHTML = data.error;
 
@@ -80,27 +126,69 @@ async function login(event) {
     }
 }
 
+function clear_profile_picture(clear_profile_picture_button) {
+    clear_profile_picture_button.parentElement.querySelector("img").src = "/profile-pictures/generic/default.png";
+    clear_profile_picture_button.style.display = "";
+    clear_profile_picture_button.parentElement.querySelector("input").value = "";
+}
+
+function upload_profile_picture(upload_profile_picture_button) {
+    upload_profile_picture_button.parentElement.querySelector("input").click();
+}
+
+async function update_profile_picture(profile_picture_upload) {
+    if (profile_picture_upload.files[0]) {
+        const image = await createImageBitmap(profile_picture_upload.files[0]);
+        const size = Math.min(image.width, image.height);
+        const canvas = new OffscreenCanvas(400, 400);
+
+        canvas.getContext("2d").drawImage(image, (image.width - size) / 2, (image.height - size) / 2, size, size, 0, 0, 400, 400);
+
+        const data_transfer = new DataTransfer();
+        data_transfer.items.add(new File([await canvas.convertToBlob({ type: "image/png" })], "profile-picture.png", { type: "image/png" }));
+
+        profile_picture_upload.files = data_transfer.files;
+
+        profile_picture_upload.parentElement.querySelector("img").src = URL.createObjectURL(profile_picture_upload.files[0]);
+        profile_picture_upload.parentElement.querySelector("#clear-profile-picture-button").style.display = "flex";
+    }
+}
+
 async function sign_up(event) {
     event.preventDefault();
 
     document.querySelector(".loading-overlay").style.display = "flex";
 
+    const data = {
+        username: document.querySelector("#sign-up-form #username").value, 
+        password: document.querySelector("#sign-up-form #password").value
+    };
+
+    const profile_picture_file = document.querySelector("#sign-up-form .profile-picture-upload input").files[0];
+
+    if (profile_picture_file) {
+        const file_reader = new FileReader();
+
+        file_reader.readAsDataURL(profile_picture_file);
+        await new Promise((resolve) => file_reader.onload = resolve);
+
+        data.profile_picture = file_reader.result.split(",")[1];
+    }
+
     const response = await fetch("?handler=SignUp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            username: document.querySelector("#sign-up-form #username").value, 
-            password: document.querySelector("#sign-up-form #password").value 
-        })
+        body: JSON.stringify(data)
     });
 
     document.querySelector(".loading-overlay").style.display = "";
 
     if (response.ok) {
         const success_message = document.querySelector("#sign-up-form #success-message");
+
         success_message.style.display = "flex";
-        
-        for (const element of document.querySelectorAll("#sign-up-form input, #sign-up-form .submit-button")) {
+
+        for (const element of document.querySelectorAll("#sign-up-form #clear-profile-picture-button, #sign-up-form input, #sign-up-form .submit-button")) {
             element.disabled = true;
         }
 
@@ -113,9 +201,11 @@ async function sign_up(event) {
         document.querySelector("#login-form .toggle-password-visibility-button").classList.add("fa-eye-slash");
 
         setTimeout(() => {
-            success_message.style.display = ""
+            success_message.style.display = "";
 
-            for (const element of document.querySelectorAll("#sign-up-form input, #sign-up-form .submit-button")) {
+            clear_profile_picture(document.querySelector("#sign-up-form #clear-profile-picture-button"));
+
+            for (const element of document.querySelectorAll("#sign-up-form #clear-profile-picture-button, #sign-up-form input, #sign-up-form .submit-button")) {
                 element.disabled = false;
             }
 
@@ -142,30 +232,112 @@ async function sign_up(event) {
     }
 }
 
-function switch_to_form(form) {
-    document.getElementById(`${form == "login" ? "sign-up" : "login"}-form`).style.display = "none";
-    document.getElementById(`${form}-form`).style.display = "";
-    document.querySelector(`#${form}-form #username`).focus();
-}
+function show_edit_profile(user_profile) {
+    profile = user_profile ?? { username, role, has_profile_picture };
 
-function reset_home() {
-    winner = "pending";
-    if (ws) {
-        ws.close();
-        ws = null;
+    document.querySelector(".edit-profile").style.display = "flex";
+
+    if (profile.has_profile_picture) {
+        document.querySelector("#edit-profile-form .profile-picture-upload img").src = `/profile-pictures/users/${profile.username}.png`;
+        document.querySelector("#edit-profile-form #clear-profile-picture-button").style.display = "flex";
     }
 
-    document.querySelector(".home").style.display = "";
-    document.querySelector(".game").style.display = "";
+    document.querySelector("#edit-profile-form #username").value = profile.username;
 
-    switch_to_tab("play");
+    if (role == "super_admin") document.getElementById("role-selector").style.display = "flex";
 
-    update_players("people");
-    update_AI_difficulty(10);
-    update_gamemode("local");
-    update_time("rapid");
-    update_player_color("white");
-    document.querySelector("#opponent-username input").value = "";
+    document.querySelector("#role-selector select").value = profile.role;
+}
+
+function hide_edit_profile() {
+    profile = null;
+
+    clear_profile_picture(document.querySelector("#edit-profile-form #clear-profile-picture-button"));
+
+    document.querySelector("#edit-profile-form #username").value = "";
+    document.querySelector("#edit-profile-form #password").value = "";
+    document.querySelector("#edit-profile-form #password").type = "password";
+    document.querySelector("#edit-profile-form #password").style.letterSpacing = "";
+    document.querySelector("#edit-profile-form .toggle-password-visibility-button").style.display = "";
+    document.querySelector("#edit-profile-form .toggle-password-visibility-button").classList.remove("fa-eye");
+    document.querySelector("#edit-profile-form .toggle-password-visibility-button").classList.add("fa-eye-slash");
+    document.getElementById("role-selector").style.display = "";
+    document.querySelector("#role-selector select").selectedIndex = 0;
+
+    document.querySelector(".edit-profile").style.display = "";
+}
+
+async function edit_profile(event) {
+    event.preventDefault();
+
+    document.querySelector(".loading-overlay").style.display = "flex";
+
+    const data = { old_username: profile.username };
+
+    if (document.querySelector("#edit-profile-form #username").value != profile.username) data.new_username = document.querySelector("#edit-profile-form #username").value;
+
+    if (document.querySelector("#edit-profile-form #password").value) data.new_password = document.querySelector("#edit-profile-form #password").value;
+
+    if (document.querySelector("#role-selector select").value != profile.role) data.new_role = document.querySelector("#role-selector select").value;
+
+    const profile_picture_file = document.querySelector("#edit-profile-form .profile-picture-upload input").files[0];
+
+    if (profile_picture_file) {
+        const file_reader = new FileReader();
+
+        file_reader.readAsDataURL(profile_picture_file);
+        await new Promise((resolve) => file_reader.onload = resolve);
+
+        data.profile_picture = file_reader.result.split(",")[1];
+    } else if (profile.has_profile_picture && !document.querySelector("#edit-profile-form #clear-profile-picture-button").style.display) {
+        data.delete_profile_picture = "true";
+    }
+
+    const response = await fetch("?handler=EditProfile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+    });
+
+    document.querySelector(".loading-overlay").style.display = "";
+
+    if (response.ok) {
+        const success_message = document.querySelector("#edit-profile-form #success-message");
+
+        success_message.style.display = "flex";
+
+        for (const element of document.querySelectorAll("#edit-profile-form #clear-profile-picture-button, #edit-profile-form input, #edit-profile-form .submit-button")) {
+            element.disabled = true;
+        }
+
+        setTimeout(() => {
+            success_message.style.display = "";
+
+            for (const element of document.querySelectorAll("#edit-profile-form #clear-profile-picture-button, #edit-profile-form input, #edit-profile-form .submit-button")) {
+                element.disabled = false;
+            }
+
+            const reload = profile.username == username;
+
+            hide_edit_profile();
+
+            if (reload) {
+                window.location.reload();
+            } else {
+                switch_to_tab("users");
+            }
+        }, 1500);
+    } else {
+        const data = await response.json();
+
+        document.querySelector("#edit-profile-form #error-message").style.display = "flex";
+        document.querySelector("#edit-profile-form #error-text").innerHTML = data.error;
+
+        setTimeout(() => {
+            document.querySelector("#edit-profile-form #error-message").style.display = "";
+            document.querySelector("#edit-profile-form #error-text").innerHTML = "";
+        }, 1500);
+    }
 }
 
 async function logout() {
@@ -176,6 +348,12 @@ async function logout() {
     document.querySelector(".loading-overlay").style.display = "";
 
     if (response.ok) {
+        username = null;
+        role = null;
+        has_profile_picture = null;
+
+        hide_edit_profile();
+
         document.querySelector(".login").style.display = "";
 
         for (const form of ["login", "sign-up"]) {
@@ -188,7 +366,9 @@ async function logout() {
             document.querySelector(`#${form}-form .toggle-password-visibility-button`).classList.add("fa-eye-slash");
         }
 
+        document.querySelector(".home .profile-picture").src = "/profile-pictures/generic/default.png";
         document.querySelector("h1").innerHTML = "Welcome To Chess!";
+        document.getElementById("users-tab-button").style.display = "";
 
         reset_home();
         switch_to_form("login");
@@ -204,11 +384,13 @@ async function switch_to_tab(tab) {
     if (tab == "play") {
         document.querySelector(".leaderboard-tab").style.display = "none";
         document.querySelector(".history-tab").style.display = "none";
+        document.querySelector(".users-tab").style.display = "none";
 
         if (players == "people" && gamemode == "online") document.querySelector("#opponent-username input").focus();
     } else if (tab == "leaderboard") {
         document.querySelector(".play-tab").style.display = "none";
         document.querySelector(".history-tab").style.display = "none";
+        document.querySelector(".users-tab").style.display = "none";
 
         document.querySelector(".leaderboard-tab tbody").innerHTML = `
             <tr>
@@ -229,7 +411,13 @@ async function switch_to_tab(tab) {
             for (const player of data) {
                 table_body += `
                     <tr>
-                        <td>${player.player}</td>
+                        <td>#${player.rank}</td>
+                        <td>
+                            <div>
+                                <img src="/profile-pictures/users/${player.player}.png" />
+                                <span>${player.player}</span>
+                            </div>
+                        </td>
                         <td>${player.rating}</td>
                         <td>${player.won}</td>
                         <td>${player.draw}</td>
@@ -240,9 +428,10 @@ async function switch_to_tab(tab) {
 
             if (table_body) document.querySelector(".leaderboard-tab tbody").innerHTML = table_body;
         }
-    } else {
+    } else if (tab == "history") {
         document.querySelector(".play-tab").style.display = "none";
         document.querySelector(".leaderboard-tab").style.display = "none";
+        document.querySelector(".users-tab").style.display = "none";
 
         document.querySelector(".history-tab tbody").innerHTML = `
             <tr>
@@ -275,6 +464,53 @@ async function switch_to_tab(tab) {
 
             if (table_body) document.querySelector(".history-tab tbody").innerHTML = table_body;
         }
+    } else {
+        document.querySelector(".play-tab").style.display = "none";
+        document.querySelector(".leaderboard-tab").style.display = "none";
+        document.querySelector(".history-tab").style.display = "none";
+
+        document.querySelector(".users-tab tbody").innerHTML = `
+            <tr>
+                <td colspan="100%" style="text-align: center;">No Users Found</td>
+            </tr>
+        `;
+
+        document.querySelector(".loading-overlay").style.display = "flex";
+
+        const response = await fetch("?handler=Users");
+        const data = await response.json();
+
+        document.querySelector(".loading-overlay").style.display = "";
+
+        if (response.ok) {
+            const role_map = { user: "User", admin: "Admin", super_admin: "Super Admin" };
+
+            let table_body = "";
+
+            for (const user of data) {
+                const edit_button_html = user.user != username && role == "admin" && (user.role == "admin" || user.role == "super_admin") ? "" : `
+                    <button onclick='show_edit_profile(${JSON.stringify({ username: user.user, role: user.role, has_profile_picture: user.has_profile_picture })})'>
+                        <span class="fas fa-user-edit"></span>
+                    </button>
+                `;
+
+                table_body += `
+                    <tr>
+                        <td>
+                            <div>
+                                <img src="/profile-pictures/users/${user.user}.png" />
+                                <span>${user.user}</span>
+                            </div>
+                        </td>
+                        <td>${role_map[user.role]}</td>
+                        <td>${user.last_login}</td>
+                        <td>${edit_button_html}</td>
+                    </tr>
+                `;
+            }
+
+            if (table_body) document.querySelector(".users-tab tbody").innerHTML = table_body;
+        }
     }
 }
 
@@ -285,15 +521,21 @@ function update_players(updated_players) {
     document.getElementById(`play-${players}`).classList.add("selected-play-config-button");
 
     if (players == "AI") {
+        document.getElementById("AI-engine").style.display = "";
         document.getElementById("AI-difficulty").style.display = "";
         document.getElementById("gamemode").style.display = "none";
         document.getElementById("time").style.display = "none";
         document.getElementById("player-color").style.display = "";
+        document.querySelector("#player-color #white-color").src = "/assets/home/play-tab/player-color/white.png";
+        document.querySelector("#player-color #black-color").src = "/assets/home/play-tab/player-color/black.png";
         document.getElementById("opponent-username").style.display = "none";
-    } else {
+    } else if (players == "people") {
+        document.getElementById("AI-engine").style.display = "none";
         document.getElementById("AI-difficulty").style.display = "none";
         document.getElementById("gamemode").style.display = "";
         document.getElementById("time").style.display = "";
+        document.querySelector("#player-color #white-color").src = "/assets/home/play-tab/player-color/white.png";
+        document.querySelector("#player-color #black-color").src = "/assets/home/play-tab/player-color/black.png";
 
         if (gamemode == "local") {
             document.getElementById("player-color").style.display = "none";
@@ -303,7 +545,23 @@ function update_players(updated_players) {
             document.getElementById("opponent-username").style.display = "";
             document.querySelector("#opponent-username input").focus();
         }
+    } else {
+        document.getElementById("AI-engine").style.display = "none";
+        document.getElementById("AI-difficulty").style.display = "";
+        document.getElementById("gamemode").style.display = "none";
+        document.getElementById("time").style.display = "none";
+        document.getElementById("player-color").style.display = "";
+        document.querySelector("#player-color #white-color").src = "/assets/home/play-tab/AI-engine/local.png";
+        document.querySelector("#player-color #black-color").src = "/assets/home/play-tab/AI-engine/stockfish.png";
+        document.getElementById("opponent-username").style.display = "none";
     }
+}
+
+function update_AI_engine(updated_AI_engine) {
+    AI_engine = updated_AI_engine;
+
+    document.querySelector("#AI-engine .selected-play-config-button")?.classList.remove("selected-play-config-button");
+    document.getElementById(`${AI_engine}-AI-engine`).classList.add("selected-play-config-button");
 }
 
 function update_AI_difficulty(updated_AI_difficulty) {
@@ -355,7 +613,7 @@ async function launch_game() {
 
             ws = new WebSocket(`${location.hostname == "localhost" ? "ws://localhost:8765" : "wss://chess.oridaniel.com/ws"}?player_color=${player_color}&opponent_username=${opponent_username}`);
 
-            ws.onmessage = async function (event) {
+            ws.onmessage = async (event) => {
                 if (event.data == "error") {
                     document.querySelector(".loading-overlay").style.display = "";
 
@@ -364,8 +622,6 @@ async function launch_game() {
                     const data = JSON.parse(event.data);
 
                     if (data.player_color) {
-                        document.querySelector(".loading-overlay").style.display = "";
-
                         player_color = data.player_color;
 
                         if (data.game_string) {
@@ -379,6 +635,8 @@ async function launch_game() {
                         } else {
                             await start_game();
                         }
+
+                        document.querySelector(".loading-overlay").style.display = "";
                     } else {
                         load_game_string(event.data);
 
@@ -400,8 +658,12 @@ async function launch_game() {
 }
 
 async function start_game(play_game_start_sfx=true) {
-    const response = await fetch("/assets/game/opening-book.json");
+    const response = await fetch("opening-book.json");
     book_moves = await response.json();
+
+    stockfish_engine = new Worker("/stockfish/stockfish-18-lite-single.js");
+    stockfish_engine.postMessage("setoption name UCI_LimitStrength value true");
+    stockfish_engine.postMessage("setoption name UCI_Elo value 1700");
 
     const time_map = { bullet: 1, blitz: 5, rapid: 10 };
     timer = { w: time_map[time] * 60, b: time_map[time] * 60 };
@@ -409,30 +671,35 @@ async function start_game(play_game_start_sfx=true) {
     document.querySelector(".home").style.display = "none";
     document.querySelector(".game").style.display = "flex";
     document.getElementById("undo-button").disabled = false;
-    document.getElementById("undo-button").style.display = players == "people" && gamemode == "online" ? "none" : "";
-    document.querySelector(`#b-player .username`).innerHTML = players == "people" && gamemode == "online" ? (player_color == "black" ? username : opponent_username) : "Black";
-    document.querySelector(`#b-player .captured-pieces`).innerHTML = "";
-    document.querySelector(`#b-player .captured-score`).innerHTML = "";
-    document.querySelector(`#b-player .timer`).style.backgroundColor = "";
-    document.querySelector(`#b-player .timer`).style.opacity = 0.5;
-    document.querySelector(`#b-player .timer img`).src = "/assets/game/timer/white-clock.png";
-    document.querySelector(`#b-player .timer img`).style.transform = "";
-    document.querySelector(`#b-player .timer span`).innerHTML = format_time(timer.b);
-    document.querySelector(`#b-player .timer span`).style.color = "";
+    document.getElementById("undo-button").style.display = (players == "people" && gamemode == "online") || players == "watch" ? "none" : "";
+    document.querySelector("#b-player .profile-picture").src = players == "AI" ? (player_color == "black" ? `/profile-pictures/users/${username}.png` : (AI_engine == "local" ? `/assets/home/play-tab/AI-difficulty/${AI_difficulty}.png` : "/assets/home/play-tab/AI-engine/stockfish.png")) : (players == "people" ? (gamemode == "local" ? "/profile-pictures/generic/black.png" : `/profile-pictures/users/${player_color == "black" ? username : opponent_username}.png`) : (player_color == "black" ? `/assets/home/play-tab/AI-difficulty/${AI_difficulty}.png` : "/assets/home/play-tab/AI-engine/stockfish.png"));
+    document.querySelector("#b-player .username").innerHTML = players == "AI" ? (player_color == "black" ? username : `${AI_engine == "local" ? "Local AI" : "Stockfish"} Level ${AI_difficulty}`) : (players == "people" ? (gamemode == "local" ? "Black" : (player_color == "black" ? username : opponent_username)) : `${player_color == "black" ? "Local AI" : "Stockfish"} Level ${AI_difficulty}`);
+    document.querySelector("#b-player .captured-pieces").innerHTML = "";
+    document.querySelector("#b-player .captured-score").innerHTML = "";
+    document.querySelector("#b-player .timer").style.display = players == "people" ? "" : "none";
+    document.querySelector("#b-player .timer").style.backgroundColor = "";
+    document.querySelector("#b-player .timer").style.opacity = 0.5;
+    document.querySelector("#b-player .timer img").src = "/assets/game/timer/white-clock.png";
+    document.querySelector("#b-player .timer img").style.transform = "";
+    document.querySelector("#b-player .timer span").innerHTML = format_time(timer.b);
+    document.querySelector("#b-player .timer span").style.color = "";
     document.querySelector(".board").style.pointerEvents = "";
-    document.querySelector(`#w-player .username`).innerHTML = players == "people" && gamemode == "online" ? (player_color == "white" ? username : opponent_username) : "White";
-    document.querySelector(`#w-player .captured-pieces`).innerHTML = "";
-    document.querySelector(`#w-player .captured-score`).innerHTML = "";
-    document.querySelector(`#w-player .timer`).style.backgroundColor = "";
-    document.querySelector(`#w-player .timer`).style.opacity = 1;
-    document.querySelector(`#w-player .timer img`).src = "/assets/game/timer/black-clock.png";
-    document.querySelector(`#w-player .timer img`).style.transform = "";
-    document.querySelector(`#w-player .timer span`).innerHTML = format_time(timer.w);
-    document.querySelector(`#w-player .timer span`).style.color = "";
+    document.querySelector("#w-player .profile-picture").src = players == "AI" ? (player_color == "white" ? `/profile-pictures/users/${username}.png` : (AI_engine == "local" ? `/assets/home/play-tab/AI-difficulty/${AI_difficulty}.png` : "/assets/home/play-tab/AI-engine/stockfish.png")) : (players == "people" ? (gamemode == "local" ? "/profile-pictures/generic/white.png" : `/profile-pictures/users/${player_color == "white" ? username : opponent_username}.png`) : (player_color == "white" ? `/assets/home/play-tab/AI-difficulty/${AI_difficulty}.png` : "/assets/home/play-tab/AI-engine/stockfish.png"));
+    document.querySelector("#w-player .username").innerHTML = players == "AI" ? (player_color == "white" ? username : `${AI_engine == "local" ? "Local AI" : "Stockfish"} Level ${AI_difficulty}`) : (players == "people" ? (gamemode == "local" ? "White" : (player_color == "white" ? username : opponent_username)) : `${player_color == "white" ? "Local AI" : "Stockfish"} Level ${AI_difficulty}`);
+    document.querySelector("#w-player .captured-pieces").innerHTML = "";
+    document.querySelector("#w-player .captured-score").innerHTML = "";
+    document.querySelector("#w-player .timer").style.display = players == "people" ? "" : "none";
+    document.querySelector("#w-player .timer").style.backgroundColor = "";
+    document.querySelector("#w-player .timer").style.opacity = 1;
+    document.querySelector("#w-player .timer img").src = "/assets/game/timer/black-clock.png";
+    document.querySelector("#w-player .timer img").style.transform = "";
+    document.querySelector("#w-player .timer span").innerHTML = format_time(timer.w);
+    document.querySelector("#w-player .timer span").style.color = "";
     document.querySelector(".popup").style.display = "";
 
     winner = null;
     undo_stack = [];
+    moves_stack = [];
     fifty_move_counter = 0;
     en_passant = { row: null, column: null };
     castling = {
@@ -453,10 +720,10 @@ async function start_game(play_game_start_sfx=true) {
     board_states = [get_board_state()];
     transposition_table = {};
 
-    document.querySelector(".game").style.flexDirection = player_color == "white" ? "column" : "column-reverse";
-    const start = player_color == "white" ? 0 : 7;
-    const end = player_color == "white" ? 8 : -1;
-    const step = player_color == "white" ? 1 : -1;
+    document.querySelector(".game").style.flexDirection = players == "watch" || player_color == "white" ? "column" : "column-reverse";
+    const start = players == "watch" || player_color == "white" ? 0 : 7;
+    const end = players == "watch" || player_color == "white" ? 8 : -1;
+    const step = players == "watch" || player_color == "white" ? 1 : -1;
 
     let board_html = "";
 
@@ -475,15 +742,14 @@ async function start_game(play_game_start_sfx=true) {
     if (play_game_start_sfx) (new Audio("/assets/game/sfx/game-start.webm")).play();
 
     if (players == "AI") {
-        document.querySelector("#b-player .timer").style.display = "none";
-        document.querySelector("#w-player .timer").style.display = "none";
-
         if (player_color == "black") setTimeout(() => play_AI_move(), 100);
-    } else {
-        document.querySelector("#b-player .timer").style.display = "";
-        document.querySelector("#w-player .timer").style.display = "";
-
+    } else if (players == "people") {
         setTimeout(() => update_timer(), 1000);
+    } else {
+        AI_engine = player_color == "white" ? "local" : "stockfish";
+        player_color = player_color == "white" ? "black" : "white";
+
+        setTimeout(() => play_AI_move(), 100);
     }
 }
 
@@ -491,6 +757,7 @@ function get_game_string(move) {
     return JSON.stringify({
         timer,
         winner,
+        moves_stack,
         fifty_move_counter,
         en_passant,
         castling,
@@ -507,6 +774,7 @@ function load_game_string(game_string) {
 
     timer = game.timer;
     winner = game.winner;
+    moves_stack = game.moves_stack;
     fifty_move_counter = game.fifty_move_counter;
     en_passant = game.en_passant;
     castling = game.castling;
@@ -545,13 +813,13 @@ function update_timer() {
         } else {
             winner = turn == "w" ? "black" : "white";
 
-            if (players == "people" && gamemode == "online") {
+            if (gamemode == "online") {
                 ws.send(JSON.stringify({ winner }));
                 ws.close();
                 ws = null;
             }
 
-            show_popup(`${turn == "w" ? "Black" : "White"} Won!`, "Timeout");
+            show_popup("Timeout!", `${gamemode == "local" ? (turn == "w" ? "Black" : "White") : (turn == player_color[0] ? opponent_username : username)} Won`);
 
             (new Audio("/assets/game/sfx/game-end.webm")).play();
         }
@@ -577,9 +845,7 @@ function click_square(square) {
 function drag_start(square) {
     remove_overlays();
 
-    const piece_color = board[Math.floor(square.id / 10)][square.id % 10][0];
-
-    if (piece_color == turn && (players == "people" && gamemode == "local" ? true : player_color[0] == turn)) {
+    if (board[Math.floor(square.id / 10)][square.id % 10][0] == turn && (players == "people" && gamemode == "local" ? true : player_color[0] == turn)) {
         from_square = square;
 
         square.insertAdjacentHTML("afterbegin", "<span class='highlight-overlay'></span>");
@@ -629,6 +895,9 @@ function drop(square) {
 }
 
 function show_popup(title, description) {
+    stockfish_engine.terminate();
+    stockfish_engine = null;
+
     document.getElementById("undo-button").disabled = true;
     document.querySelector(`#${turn}-player .timer`).style.backgroundColor = "";
     document.querySelector(`#${turn}-player .timer img`).src = `/assets/game/timer/${turn == "w" ? "black" : "white"}-clock.png`;
@@ -741,7 +1010,7 @@ function render_board(move, custom_sfx=null) {
         if (in_check()) {
             winner = turn == "w" ? "black" : "white";
 
-            show_popup("Checkmate!", `${turn == "w" ? "Black" : "White"} Won`);
+            show_popup("Checkmate!", `${players == "AI" ? (turn == player_color[0] ? `${AI_engine == "local" ? "Local AI" : "Stockfish"} Level ${AI_difficulty}` : username) : (players == "people" ? (gamemode == "local" ? (turn == "w" ? "Black" : "White") : (turn == player_color[0] ? opponent_username : username)) : `${AI_engine == "local" ? "Local AI" : "Stockfish"} Level ${AI_difficulty}`)} Won`);
 
             custom_sfx = "game-end";
         } else {
@@ -836,6 +1105,8 @@ function apply_move(move, update_turn=true) {
 
     if (update_turn) turn = turn == "w" ? "b" : "w";
 
+    moves_stack.push(String.fromCharCode(97 + move.from.column) + (8 - move.from.row) + String.fromCharCode(97 + move.to.column) + (8 - move.to.row) + (sfx == "promote" ? "q" : ""));
+
     board_states.push(get_board_state());
 }
 
@@ -857,6 +1128,8 @@ function undo_move() {
     castling = undo.castling;
     turn = undo.turn;
     sfx = undo.sfx;
+
+    moves_stack.pop();
 
     board_states.pop();
 }
@@ -1169,57 +1442,89 @@ function get_book_move() {
     return null;
 }
 
-function play_AI_move() {
+async function play_AI_move() {
     document.querySelector(".board").style.pointerEvents = "none";
 
-    let best_move = undo_stack.length < 11 && get_book_move();
+    let best_move;
 
-    if (!best_move) {
-        minimax_start_time = performance.now();
+    if (AI_engine == "local") {
+        best_move = moves_stack.length < 11 && get_book_move();
 
-        let best_move_score = -Infinity;
+        if (!best_move) {
+            minimax_start_time = performance.now();
 
-        for (let depth = 1 ; continue_minimax() ; depth++) {
-            for (const move of get_all_moves(first_move=best_move)) {
-                apply_move(move);
+            for (let depth = 1 ; continue_minimax() ; depth++) {
+                let best_move_score = -Infinity;
 
-                let current_move;
+                for (const move of get_all_moves(first_move=best_move)) {
+                    apply_move(move);
 
-                if (get_special_draw()) {
-                    current_move = { score: 0 };
-                } else {
-                    const current_board_state = get_board_state();
-                    const transposition = transposition_table[current_board_state];
+                    let current_move;
 
-                    if (transposition && transposition.depth >= depth - 1 && transposition.flag == "EXACT") {
-                        current_move = { score: transposition.score };
+                    if (get_special_draw()) {
+                        current_move = { score: 0 };
                     } else {
-                        const search_depth = in_check() ? depth : depth - 1;
+                        const current_board_state = get_board_state();
+                        const transposition = transposition_table[current_board_state];
 
-                        current_move = minimax(search_depth, -Infinity, Infinity);
-                        if (current_move.cache) transposition_table[current_board_state] = { score: current_move.score, depth: search_depth, flag: "EXACT" };
+                        if (transposition && transposition.depth >= depth - 1 && transposition.flag == "EXACT") {
+                            current_move = { score: transposition.score };
+                        } else {
+                            const search_depth = in_check() ? depth : depth - 1;
+
+                            current_move = minimax(search_depth, -Infinity, Infinity);
+                            if (current_move.cache) transposition_table[current_board_state] = { score: current_move.score, depth: search_depth, flag: "EXACT" };
+                        }
+                    }
+
+                    undo_move();
+
+                    if (current_move.ignore) break;
+
+                    if (current_move.score > best_move_score) {
+                        best_move_score = current_move.score;
+                        best_move = move;
                     }
                 }
-
-                undo_move();
-
-                if (current_move.score > best_move_score) {
-                    best_move_score = current_move.score;
-                    best_move = move;
-                }
-
-                if (!continue_minimax()) break;
             }
         }
+    } else {
+        best_move = await new Promise((resolve) => {
+            stockfish_engine.onmessage = (event) => {
+                if (event.data.startsWith("bestmove")) {
+                    const move = event.data.split(" ")[1];
+
+                    resolve({
+                        from: { row: 8 - move[1], column: move.charCodeAt(0) - 97 },
+                        to: { row: 8 - move[3], column: move.charCodeAt(2) - 97 }
+                    });
+                }
+            };
+
+            stockfish_engine.postMessage(`position startpos moves ${moves_stack.join(" ")}`);
+            stockfish_engine.postMessage(`go movetime ${AI_difficulty * 200}`);
+        });
     }
 
-    document.querySelector(".board").style.pointerEvents = "";
+    if (players != "watch") document.querySelector(".board").style.pointerEvents = "";
 
     apply_move(best_move);
     render_board(best_move);
+
+    if (players == "watch") {
+        if (winner) {
+            player_color = player_color == "white" ? "black" : "white";
+        } else {
+            AI_engine = AI_engine == "local" ? "stockfish" : "local";
+
+            setTimeout(() => play_AI_move(), 100);
+        }
+    }
 }
 
 function minimax(depth, alpha, beta) {
+    if (!continue_minimax()) return { cache: false, ignore: true };
+
     const is_AI_turn = turn != player_color[0];
 
     if (!is_possible_moves()) {
@@ -1271,6 +1576,8 @@ function minimax(depth, alpha, beta) {
 
         undo_move();
 
+        if (current_move.ignore) return current_move;
+
         if (is_AI_turn) {
             if (current_move.score > best_move.score) best_move = current_move;
             if (current_move.score > alpha) alpha = current_move.score;
@@ -1279,12 +1586,7 @@ function minimax(depth, alpha, beta) {
             if (current_move.score < beta) beta = current_move.score;
         }
 
-        if (beta <= alpha) break;
-
-        if (!continue_minimax()) {
-            best_move.cache = false;
-            break;
-        }
+        if (beta <= alpha) return best_move;
     }
 
     return best_move;
@@ -1315,7 +1617,7 @@ function get_all_capture_moves() {
 
 function quiescence(alpha, beta) {
     const is_AI_turn = turn != player_color[0];
-    let stand_pat = (is_AI_turn ? 1 : -1) * evaluate_board();
+    const stand_pat = (is_AI_turn ? 1 : -1) * evaluate_board();
 
     if (is_AI_turn) {
         if (stand_pat >= beta) return beta;
@@ -1455,4 +1757,31 @@ function evaluate_board() {
     score += (score > 0 ? 1 : -1) * (1 - pieces / 32) * (12 - Math.sqrt((kings_positions.w.row - kings_positions.b.row) ** 2 + (kings_positions.w.column - kings_positions.b.column) ** 2));
 
     return score;
+}
+
+function get_fen_string() {
+    let fen_string = "";
+
+    for (let row = 0 ; row < 8 ; row++) {
+        let spaces = 0;
+
+        for (let column = 0 ; column < 8 ; column++) {
+            if (board[row][column]) {
+                if (spaces) fen_string += spaces;
+                spaces = 0;
+
+                fen_string += board[row][column][0] == "b" ? board[row][column][1] : board[row][column][1].toUpperCase();
+            } else {
+                spaces++;
+            }
+        }
+
+        if (spaces) fen_string += spaces;
+
+        if (row != 7) fen_string += "/";
+    }
+
+    fen_string += " " + turn + " " + (((castling.w.kr ? "K" : "") + (castling.w.qr ? "Q" : "") + (castling.b.kr ? "k" : "") + (castling.b.qr ? "q" : "")) || "-") + " " + (en_passant.row && en_passant.column ? String.fromCharCode(97 + en_passant.column) + (8 - en_passant.row) : "-") + " " + fifty_move_counter + " " + (1 + Math.floor(moves_stack.length / 2));
+
+    return fen_string;
 }

@@ -42,10 +42,26 @@
                 <span id="error-text"></span>
             </div>
 
-            <div class="switch-form-button" onclick="switch_to_form('sign-up')">Sign Up</div>
+            <div class="switch-form-button" onclick="switch_to_form('sign-up')">
+                <span class="fas fa-user-plus"></span>Sign Up
+            </div>
         </form>
 
         <form id="sign-up-form" onsubmit="sign_up(event)">
+            <div class="profile-picture-upload">
+                <img src="/profile-pictures/generic/default.png" />
+
+                <button type="button" id="clear-profile-picture-button" onclick="clear_profile_picture(this)">
+                    <span class="fas fa-times"></span>
+                </button>
+
+                <button type="button" id="upload-profile-picture-button" onclick="upload_profile_picture(this)">
+                    <span class="fas fa-camera"></span>
+                </button>
+
+                <input type="file" accept="image/*" onchange="update_profile_picture(this)">
+            </div>
+
             <h2>Sign Up To Chess</h2>
 
             <div class="fields-container">
@@ -74,14 +90,79 @@
                 <span class="fas fa-user-check"></span>Account Created Successfully
             </div>
 
-            <div class="switch-form-button" onclick="switch_to_form('login')">Login</div>
+            <div class="switch-form-button" onclick="switch_to_form('login')">
+                <span class="fas fa-sign-in"></span>Login
+            </div>
+        </form>
+    </div>
+
+    <div class="edit-profile">
+        <form id="edit-profile-form" onsubmit="edit_profile(event)">
+            <span class="fas fa-times hide-edit-profile-button" onclick="hide_edit_profile()"></span>
+
+            <div class="profile-picture-upload">
+                <img src="/profile-pictures/generic/default.png" />
+
+                <button type="button" id="clear-profile-picture-button" onclick="clear_profile_picture(this)">
+                    <span class="fas fa-times"></span>
+                </button>
+
+                <button type="button" id="upload-profile-picture-button" onclick="upload_profile_picture(this)">
+                    <span class="fas fa-camera"></span>
+                </button>
+
+                <input type="file" accept="image/*" onchange="update_profile_picture(this)">
+            </div>
+
+            <h2>Edit Profile</h2>
+
+            <div class="fields-container">
+                <div class="input-box">
+                    <span class="fas fa-user input-icon"></span>
+                    <input type="text" id="username" placeholder="Username" oninput="validate_usename(this)" required>
+                </div>
+
+                <div class="input-box">
+                    <span class="fas fa-lock input-icon"></span>
+                    <input type="password" id="password" placeholder="Password" oninput="validate_password(this)">
+                    <span class="fas fa-eye-slash toggle-password-visibility-button" onclick="toggle_password_visibility(this)"></span>
+                </div>
+
+                <div class="input-box" id="role-selector">
+                    <span class="fas fa-id-card input-icon"></span>
+
+                    <select>
+                        <option selected disabled>Choose Role</option>
+                        <option value="user">User</option>
+                        <option value="admin">Admin</option>
+                        <option value="super_admin">Super Admin</option>
+                    </select>
+
+                    <span class="fas fa-angle-down"></span>
+                </div>
+            </div>
+
+            <button class="submit-button">
+                <span class="fas fa-user-check"></span>Save Changes
+            </button>
+
+            <div class="form-message" id="error-message">
+                <span class="fas fa-exclamation-triangle"></span>
+                <span id="error-text"></span>
+            </div>
+
+            <div class="form-message" id="success-message">
+                <span class="fas fa-user-check"></span>Changes Saved Successfully
+            </div>
+
+            <div class="switch-form-button" onclick="logout()">
+                <span class="fas fa-sign-out"></span>Logout
+            </div>
         </form>
     </div>
 
     <div class="home">
-        <button class="logout-button" onclick="logout()">
-            <span class="fas fa-sign-out"></span>Logout
-        </button>
+        <img src="/profile-pictures/generic/default.png" class="profile-picture" onclick="show_edit_profile()"/>
 
         <h1>Welcome To Chess!</h1>
 
@@ -97,17 +178,35 @@
             <button id="history-tab-button" onclick="switch_to_tab('history')">
                 <img src="/assets/home/switch-tab-buttons/history.png" /><span>History</span>
             </button>
+
+            <button id="users-tab-button" onclick="switch_to_tab('users')">
+                <img src="/assets/home/switch-tab-buttons/users.png" /><span>Users</span>
+            </button>
         </div>
 
         <div class="play-tab">
             <div class="play-config">
                 <div id="players">
                     <button id="play-AI" onclick="update_players('AI')">
-                        <img src="/assets/home/play-tab/players/AI.png" />Play AI
+                        <img src="/assets/home/play-tab/players/AI.png" />Play<br />AI
                     </button>
 
                     <button id="play-people" onclick="update_players('people')">
-                        <img src="/assets/home/play-tab/players/people.png" />Play People
+                        <img src="/assets/home/play-tab/players/people.png" />Play<br />People
+                    </button>
+
+                    <button id="play-watch" onclick="update_players('watch')">
+                        <img src="/assets/home/play-tab/players/watch.png" />Watch<br />AI
+                    </button>
+                </div>
+
+                <div id="AI-engine">
+                    <button id="local-AI-engine" onclick="update_AI_engine('local')">
+                        <img src="/assets/home/play-tab/AI-engine/local.png" />Local
+                    </button>
+
+                    <button id="stockfish-AI-engine" onclick="update_AI_engine('stockfish')">
+                        <img src="/assets/home/play-tab/AI-engine/stockfish.png" />Stockfish
                     </button>
                 </div>
 
@@ -142,9 +241,9 @@
                 </div>
 
                 <div id="player-color">
-                    <img id="white-color" src="/assets/home/play-tab/player-color/white.png" onclick="update_player_color('white')" />
+                    <img id="white-color" onclick="update_player_color('white')" />
                     <img id="random-color" src="/assets/home/play-tab/player-color/random.png" onclick="update_player_color('random')" />
-                    <img id="black-color" src="/assets/home/play-tab/player-color/black.png" onclick="update_player_color('black')" />
+                    <img id="black-color" onclick="update_player_color('black')" />
                 </div>
 
                 <div class="input-box" id="opponent-username">
@@ -162,6 +261,7 @@
             <table>
                 <thead>
                     <tr>
+                        <th></th>
                         <th>Player</th>
                         <th>Rating</th>
                         <th>Won</th>
@@ -188,6 +288,21 @@
                 <tbody></tbody>
             </table>
         </div>
+
+        <div class="users-tab">
+            <table>
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Last Login</th>
+                        <th>Edit</th>
+                    </tr>
+                </thead>
+
+                <tbody></tbody>
+            </table>
+        </div>
     </div>
 
     <div class="game">
@@ -202,10 +317,10 @@
         </div>
 
         <div class="player-info" id="b-player">
-            <img class="profile-picture" src="/assets/game/profile-pictures/black.png" />
+            <img class="profile-picture" onerror="this.src = '/profile-pictures/generic/black.png'" />
 
             <div class="player-data">
-                <div class="username">Black</div>
+                <div class="username"></div>
 
                 <div class="captured-data">
                     <span class="captured-pieces"></span>
@@ -222,10 +337,10 @@
         <div class="board"></div>
 
         <div class="player-info" id="w-player">
-            <img class="profile-picture" src="/assets/game/profile-pictures/white.png" />
+            <img class="profile-picture" onerror="this.src = '/profile-pictures/generic/white.png'" />
 
             <div class="player-data">
-                <div class="username">White</div>
+                <div class="username"></div>
 
                 <div class="captured-data">
                     <span class="captured-pieces"></span>
