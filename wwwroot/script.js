@@ -394,7 +394,7 @@ async function switch_to_tab(tab) {
 
         document.querySelector(".leaderboard-tab tbody").innerHTML = `
             <tr>
-                <td colspan="100%" style="text-align: center;">No Players Found</td>
+                <td colspan="100%" style="text-align: center; padding: 20px;">No Players Found</td>
             </tr>
         `;
 
@@ -435,7 +435,7 @@ async function switch_to_tab(tab) {
 
         document.querySelector(".history-tab tbody").innerHTML = `
             <tr>
-                <td colspan="100%" style="text-align: center;">No Games Found</td>
+                <td colspan="100%" style="text-align: center; padding: 20px;">No Games Found</td>
             </tr>
         `;
 
@@ -471,7 +471,7 @@ async function switch_to_tab(tab) {
 
         document.querySelector(".users-tab tbody").innerHTML = `
             <tr>
-                <td colspan="100%" style="text-align: center;">No Users Found</td>
+                <td colspan="100%" style="text-align: center; padding: 20px;">No Users Found</td>
             </tr>
         `;
 

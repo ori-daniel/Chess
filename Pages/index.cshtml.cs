@@ -222,7 +222,7 @@ public class IndexModel : PageModel {
                     string newUsername = data.ContainsKey("new_username") ? (data["new_username"] ?? "") : "";
                     string newPassword = data.ContainsKey("new_password") ? (data["new_password"] ?? "") : "";
                     string newRole = data.ContainsKey("new_role") ? (data["new_role"] ?? "") : oldUsernameRole;
-                    string deleteProfilePicture = data.ContainsKey("delete_profile_picture") ? (data["delete_profile_picture"] ?? "") : "";
+                    bool deleteProfilePicture = (data.ContainsKey("delete_profile_picture") ? (data["delete_profile_picture"] ?? "") : "") == "true";
 
                     if ((data.ContainsKey("new_username") && !Regex.IsMatch(newUsername, @"^[A-Za-z0-9-]+$")) || (data.ContainsKey("new_password") && (newPassword == "" || newPassword.Any(char.IsWhiteSpace) || newPassword.Length > 12)) || !(newRole == "user" || newRole == "admin" || newRole == "super_admin")) {
                         connection.Close();
@@ -248,7 +248,7 @@ public class IndexModel : PageModel {
                             connection.Close();
                             return new JsonResult(new { error = "Invalid Profile Picture" }) { StatusCode = 400 };
                         }
-                    } else if (deleteProfilePicture == "true") {
+                    } else if (deleteProfilePicture) {
                         System.IO.File.Delete($"wwwroot/profile-pictures/users/{oldUsername}.png");
                     }
 
@@ -335,7 +335,7 @@ public class IndexModel : PageModel {
         usersCommand.CommandText = "SELECT username FROM users";
         SqliteDataReader usersReader = usersCommand.ExecuteReader();
 
-        List<Dictionary<string, string>> leaderboard = new List<Dictionary<string, string>>();
+        List<Dictionary<string, object>> leaderboard = new List<Dictionary<string, object>>();
 
         while (usersReader.Read()) {
             string username = usersReader["username"].ToString() ?? "";
@@ -359,20 +359,20 @@ public class IndexModel : PageModel {
                 }
             }
 
-            leaderboard.Add(new Dictionary<string, string> {
-                { "rank", "" },
+            leaderboard.Add(new Dictionary<string, object> {
+                { "rank", 0 },
                 { "player", username },
-                { "rating", (800 + 10 * (won - lost)).ToString() },
-                { "won", won.ToString() },
-                { "draw", draw.ToString() },
-                { "lost", lost.ToString() }
+                { "rating", 800 + 10 * (won - lost) },
+                { "won", won },
+                { "draw", draw },
+                { "lost", lost }
             });
         }
 
-        leaderboard.Sort((a, b) => int.Parse(b["rating"]) - int.Parse(a["rating"]));
+        leaderboard.Sort((a, b) => (int)b["rating"] - (int)a["rating"]);
 
         for (int i = 0 ; i < leaderboard.Count ; i++) {
-            leaderboard[i]["rank"] = (i + 1).ToString();
+            leaderboard[i]["rank"] = i + 1;
         }
 
         connection.Close();
@@ -451,14 +451,14 @@ public class IndexModel : PageModel {
                         usersCommand.CommandText = "SELECT username, role, last_login FROM users ORDER BY username";
                         SqliteDataReader usersReader = usersCommand.ExecuteReader();
 
-                        List<Dictionary<string, string>> users = new List<Dictionary<string, string>>();
+                        List<Dictionary<string, object>> users = new List<Dictionary<string, object>>();
 
                         while (usersReader.Read()) {
-                            users.Add(new Dictionary<string, string> {
+                            users.Add(new Dictionary<string, object> {
                                 { "user", usersReader["username"].ToString() ?? "" },
                                 { "role", usersReader["role"].ToString() ?? "" },
                                 { "last_login", usersReader["last_login"] == DBNull.Value ? "" : DateTime.Parse(usersReader["last_login"].ToString() ?? "").ToString("dd/MM/yy") },
-                                { "has_profile_picture", System.IO.File.Exists($"wwwroot/profile-pictures/users/{usersReader["username"].ToString() ?? ""}.png").ToString().ToLower() }
+                                { "has_profile_picture", System.IO.File.Exists($"wwwroot/profile-pictures/users/{usersReader["username"].ToString() ?? ""}.png") }
                             });
                         }
 

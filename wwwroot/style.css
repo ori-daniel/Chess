@@ -574,6 +574,7 @@ tr:nth-child(even) td {
 }
 
 .leaderboard-tab th:nth-child(2), .leaderboard-tab td:nth-child(2) {
+    width: 100%;
     padding-left: 0;
     text-align: left;
 }
@@ -657,6 +658,7 @@ tr:nth-child(even) td {
 }
 
 .users-tab th:nth-child(1), .users-tab td:nth-child(1) {
+    width: 100%;
     text-align: left;
 }
 
