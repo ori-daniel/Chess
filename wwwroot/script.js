@@ -247,6 +247,8 @@ function show_edit_profile(user_profile) {
     if (role == "super_admin") document.getElementById("role-selector").style.display = "flex";
 
     document.querySelector("#role-selector select").value = profile.role;
+
+    if (profile.username != username) document.querySelector("#edit-profile-form .switch-form-button").style.display = "none";
 }
 
 function hide_edit_profile() {
@@ -263,6 +265,7 @@ function hide_edit_profile() {
     document.querySelector("#edit-profile-form .toggle-password-visibility-button").classList.add("fa-eye-slash");
     document.getElementById("role-selector").style.display = "";
     document.querySelector("#role-selector select").selectedIndex = 0;
+    document.querySelector("#edit-profile-form .switch-form-button").style.display = "";
 
     document.querySelector(".edit-profile").style.display = "";
 }
